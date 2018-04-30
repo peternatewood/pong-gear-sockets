@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Pong Gear - Tactical Sports Action</title>
+  <meta charset="utf-8" name="viewport" content="width=device-width initial-scale=1"/>
+
+  <link rel="stylesheet" type="text/css" href="http://fonts.googleapis.com/css?family=Fugaz+One|Gugi"/>
+  <link rel="stylesheet" type="text/css" href="styles.css"/>
+</head>
+<body>
+  <noscript>Please enable JavaScript to play this game</noscript>
+  <main id="canvas-wrapper">
+    <canvas id="canvas" width="1024" height="640">
+    <!-- Table for browser requirements -->
+      <table>
+        <caption>Sorry, your browser does not meet the minimum requirements for this game</caption>
+        <thead>
+          <tr><th>Browser</th><th>Oldest Supported Version</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Internet Explorer</td><td>9.0</td></tr>
+          <tr><td>Firefox</td><td>3.6</td></tr>
+          <tr><td>Chrome</td><td>4.0</td></tr>
+          <tr><td>Safari</td><td>4.0</td></tr>
+          <tr><td>Opera</td><td>10.1</td></tr>
+        </tbody>
+      </table>
+    </canvas>
+  </main>
+  <!-- Credit to retrogamezone.co.uk, ripped by GOEMAR -->
+  <img id="spritesheet" class="hide" src="spritesheet.png"/>
+  <!-- Prerender canvases -->
+  <canvas id="life-head" class="hide" width="14" height="16"></canvas>
+  <canvas id="grenade" class="hide" width="56" height="14"></canvas>
+  <canvas id="powerups" class="hide" width="96" height="32"></canvas>
+  <canvas id="prerender" class="hide" width="1024" height="640"></canvas>
+  <!-- Music file and controls-->
+  <aside class="music-controls">
+    <div class="controls-container">
+      <!-- <h1>Music</h1> -->
+      <input id="mute-music" class="hide" type="checkbox" checked="checked"/>
+      <label for="mute-music"><i class="speaker"></i>Music</label>
+      <input id="volume-music" type="range" min="0" max="1" step="0.01" value="1"/>
+    </div>
+
+    <div class="controls-container">
+      <!-- <h1>Sounds</h1> -->
+      <input id="mute-sounds" class="hide" type="checkbox"/>
+      <label for="mute-sounds"><i class="speaker"></i>Sounds</label>
+      <input id="volume-sounds" type="range" min="0" max="1" step="0.01" value="1"/>
+    </div>
+  </aside>
+  <audio id="music" src="msx-tara.mp3" loop></audio>
+</body>
+<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+<script type="text/javascript" src="main.js"></script>
+</html>
