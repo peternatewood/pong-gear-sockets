@@ -1,0 +1,231 @@
+body {
+  overflow: hidden;
+  background: #244;
+  text-align: center;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+.hide {
+  position: absolute !important;
+  display: block !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  height: 1px !important;
+  width: 1px !important;
+  top: 0 !important;
+  left: -999em !important;
+}
+#canvas-wrapper {
+  position: fixed;
+  overflow: hidden;
+  margin: -322px auto 0;
+  width: 1028px;
+  height: 644px;
+  top: 50%;
+  left: 0;
+  right: 0;
+}
+#canvas {
+  position: absolute;
+  background: #A97;
+  border: 2px solid #000;
+  top: 0;
+  left: 0;
+}
+#canvas table {
+  background: #000;
+  border-collapse: collapse;
+  color: #FFF;
+  font: bold 1em/1.2em Helvetica;
+  letter-spacing: 1px;
+  margin: 16px auto;
+}
+#canvas caption,
+#canvas th,
+#canvas td {
+  background: #000;
+  border: 1px solid #FFF;
+  padding: 1em;
+}
+#canvas td {
+  padding: 0.5em 1em;
+}
+
+.music-controls {
+  position: fixed;
+  color: #FFF;
+  text-align: left;
+  padding: 0 12px;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+/* Checkbox inputs */
+input[type="checkbox"] + label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  font: 1.5em monospace;
+  padding-left: 48px;
+  margin: 0;
+}
+input[type="checkbox"] + label:before,
+input[type="checkbox"] + label:after {
+  content: "";
+  position: absolute;
+  border-color: transparent #FFF transparent transparent;
+  border-radius: 100%;
+  border-style: solid;
+  border-width: 4px;
+  top: 50%;
+}
+input[type="checkbox"] + label:before {
+  margin-top: -14px;
+  width: 20px;
+  height: 20px;
+  left: 0px;
+}
+input[type="checkbox"] + label:after {
+  margin-top: -20px;
+  width: 32px;
+  height: 32px;
+  left: -4px;
+}
+input[type="checkbox"]:checked + label:before,
+input[type="checkbox"]:checked + label:after {
+  background: #FFF;
+  border: 0;
+  border-radius: 0;
+  margin-top: -2px;
+  width: 16px;
+  height: 4px;
+  left: 20px;
+}
+input[type="checkbox"]:checked + label:before {
+  transform: rotate(45deg);
+}
+input[type="checkbox"]:checked + label:after {
+  transform: rotate(-45deg);
+}
+.speaker {
+  position: absolute;
+  display: block;
+  background: #FFF;
+  width: 10px;
+  height: 10px;
+  top: calc(50% - 5px);
+  left: 0;
+}
+.speaker:after {
+  content: "";
+  position: absolute;
+  border-color: transparent #FFF transparent transparent;
+  border-radius: 100%;
+  border-style: solid;
+  border-width: 16px;
+  top: -11px;
+  left: -15px;
+}
+/* Range inputs */
+input[type=range] {
+  -webkit-appearance: none;
+  margin: 18px auto;
+  width: 100%;
+}
+input[type=range]:focus {
+  outline: none;
+}
+/* Track for webkit */
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8.4px;
+  cursor: pointer;
+  animate: 0.2s;
+  box-shadow: inset 1px 1px 1px #000000, inset 0px 0px 1px #0d0d0d;
+  background: #333;
+  border-radius: 1.3px;
+  border: 0.2px solid #010101;
+}
+/* Thumb for webkit */
+input[type=range]::-webkit-slider-thumb {
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  height: 24px;
+  width: 8px;
+  border-radius: 4px;
+  background: #CCC;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -9px;
+}
+/* Override webkit track styles on focus */
+input[type=range]:focus::-webkit-slider-runnable-track {
+  background: #333;
+}
+/* Track for Firefox */
+input[type=range]::-moz-range-track {
+  cursor: pointer;
+  width: 100%;
+  height: 8.4px;
+  animate: 0.2s;
+  box-shadow: inset 1px 1px 1px #000000, inset 0px 0px 1px #0d0d0d;
+  background: #333;
+  border-radius: 1.3px;
+  border: 0.2px solid #010101;
+}
+/* Thumb for Firefox */
+input[type=range]::-moz-range-thumb {
+  background: #CCC;
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  height: 24px;
+  width: 8px;
+  cursor: pointer;
+}
+/* Track for IE */
+input[type=range]::-ms-track {
+  width: 100%;
+  height: 8.4px;
+  cursor: pointer;
+  animate: 0.2s;
+  background: transparent;
+  border-color: transparent;
+  border-width: 16px 0;
+  color: transparent;
+}
+input[type=range]::-ms-fill-lower {
+  background: #CCC;
+  border: 0.2px solid #010101;
+  border-radius: 2.6px;
+  box-shadow: inset 1px 1px 1px #000000, inset 0px 0px 1px #0d0d0d;
+}
+input[type=range]::-ms-fill-upper {
+  background: #CCC;
+  border: 0.2px solid #010101;
+  border-radius: 2.6px;
+  box-shadow: inset 1px 1px 1px #000000, inset 0px 0px 1px #0d0d0d;
+}
+/* Thumb for IE */
+input[type=range]::-ms-thumb {
+  box-shadow: 1px 1px 1px #000000, 0px 0px 1px #0d0d0d;
+  border: 1px solid #000000;
+  height: 24px;
+  width: 8px;
+  border-radius: 4px;
+  background: #FFF;
+  cursor: pointer;
+}
+input[type=range]:focus::-ms-fill-lower {
+  background: #333;
+}
+input[type=range]:focus::-ms-fill-upper {
+  background: #333;
+}
+input[type=range]::-moz-focus-outer {
+  border: 0;
+}
