@@ -9,16 +9,131 @@
   - Fast Field: grenade is faster on your side
   - Tranq Pistol: single-shot pistol temporarily puts opponent to sleep if it hits
 */
-// Socket stuff
-var socket = io();
-socket.on("name", function(name) {
-  console.log("Welcome %s!", name);
-});
+var debug = true;
+var debugInput = document.getElementById("debug");
+debugInput.value = "";
 
 const TAU = 2 * Math.PI;
 const LOAD_DELAY = 600;
 var loadCountdown = LOAD_DELAY;
-var scene = "title"; // title, game, gameover
+var scene = "title"; // title, lobby, game, gameover
+const LOBBY_OPTIONS = [ "join game", "create game", "vs bot" ];
+var lobbyCursor = 0;
+var gamesAvailable = false;
+var waitingForPlayer = false;
+
+// Socket stuff
+var playerNum, playerName, rerolls;
+var names = [ "", "" ];
+var socket = io();
+socket.on("welcome", function(data) {
+  debugInput.value = "Welcome " + data.name + "!";
+  playerName = data.name;
+  rerolls = data.rerolls;
+  gamesAvailable = data.gamesAvailable;
+  if (!gamesAvailable) {
+    lobbyCursor = 1;
+  }
+});
+
+socket.on("player num", function(num) {
+  playerNum = num;
+});
+socket.on("game created", function(num) {
+  debugInput.value = "Created game, waiting for player... ";
+  playerNum = num;
+});
+
+socket.on("games available", function() {
+  gamesAvailable = true;
+});
+socket.on("no games available", function() {
+  gamesAvailable = false;
+});
+
+socket.on("new name", function(data) {
+  playerName = data.name;
+  rerolls = data.rerolls;
+});
+socket.on("reroll limit", function(msg) {
+  debugInput.value = msg;
+});
+
+socket.on("change scene", function(s) {
+  scene = s;
+  switch (scene) {
+    case "lobby":
+      // Prerender lobby?
+      if (titleX < SCREEN_W / 2) {
+        titleX = SCREEN_W / 2;
+      }
+      if (!animateTitle) {
+        animateTitle = true;
+      }
+      lobbyCursor = gamesAvailable ? 0 : 1;
+      break;
+    case "game":
+      prerenderField();
+      break;
+    case "gameover":
+      prerenderGameover();
+      break;
+  }
+});
+
+socket.on("start game", function(playerNames) {
+  console.log("start game, %d", playerNum);
+  debugInput.value = playerNames.join(" vs ");
+  names[0] = playerNames[0];
+  names[1] = playerNames[1];
+  waitingForPlayer = false;
+  prerenderField();
+  scene = "game";
+});
+socket.on("rematch", function(gameData) {
+  console.log("rematch, %d", playerNum);
+  debugInput.value = names.join(" vs ");
+  // names[0] = playerNames[0];
+  // names[1] = playerNames[1];
+  // waitingForPlayer = false;
+  prerenderField();
+  scene = "game";
+});
+
+socket.on("game exists", function(msg) {
+  debugInput.value = msg;
+});
+
+socket.on("update", function(gameData) {
+  players         = gameData.players;
+  lives           = gameData.lives;
+  spriteClips     = gameData.spriteClips;
+  asleep          = gameData.asleep;
+  grenade         = gameData.grenade;
+  grenadeState    = gameData.grenadeState;
+  grenadeSpeeds   = gameData.grenadeSpeeds;
+  powerups        = gameData.powerups;
+  tranquilizers   = gameData.tranquilizers;
+  powerupMessages = gameData.powerupMessages;
+  startCountdown  = gameData.startCountdown;
+
+  if (gameData.scene === "gameover") {
+    scene = "gameover";
+    winner = gameData.winner;
+    lostPlayer = gameData.lostPlayer;
+    prerenderGameover();
+  }
+});
+
+socket.on("wants rematch", function(num) {
+  console.log("Wants rematch!");
+  spriteClips[2 * num] = 7;
+});
+socket.on("opponent disconnected", function() {
+  scene = "lobby";
+  lobbyCursor = gamesAvailable ? 0 : 1;
+  socket.emit("opponent disconnected");
+});
 
 var context = document.getElementById('canvas').getContext('2d');
 context.lineJoin = "round";
@@ -28,6 +143,7 @@ const SCREEN_W = context.canvas.width;
 const SCREEN_H = context.canvas.height;
 
 var titleX = SCREEN_W / -2;
+var titleY = SCREEN_H / 2;
 var animateTitle = true;
 
 var spritesheet = document.getElementById("spritesheet");
@@ -103,14 +219,15 @@ function prerenderGameover() {
   preContext.fillStyle = PALETTE[3];
   preContext.strokeStyle = PALETTE[1];
   preContext.lineWidth = 2;
-  preContext.strokeText("Player " + (winner + 1) + " wins!", SCREEN_W / 2, SCREEN_H / 4);
-  preContext.fillText("Player " + (winner + 1) + " wins!", SCREEN_W / 2, SCREEN_H / 4);
+  preContext.strokeText(names[winner] + " wins!", SCREEN_W / 2, SCREEN_H / 4);
+  preContext.fillText(names[winner] + " wins!", SCREEN_W / 2, SCREEN_H / 4);
   preContext.font = "32px Gugi";
   preContext.strokeText("Remaining Lives: " + lives[winner], SCREEN_W / 2, SCREEN_H / 2);
   preContext.fillText("Remaining Lives: " + lives[winner], SCREEN_W / 2, SCREEN_H / 2);
   preContext.font = "24px monospace";
   preContext.fillStyle = PALETTE[1];
-  preContext.fillText("Press any key to play again", SCREEN_W / 2, SCREEN_H * 0.75);
+  preContext.fillText("Press spacebar to rematch " + names[(playerNum + 1) % 2], SCREEN_W / 2, SCREEN_H * 0.7);
+  preContext.fillText("Press \"r\" to return to the lobby", SCREEN_W / 2, SCREEN_H * 0.8);
 }
 
 const SPAWN_CHANCE = 0.25;
@@ -129,81 +246,6 @@ var powerupMessages = new Uint16Array(4);
 // x, y, state
 // State: 0 => inactive, 1 => active, 2 => firing
 var tranquilizers = new Uint16Array(6);
-function updatePowerup(p) {
-  // Set ranges for spawning
-  const MIN_X = 2 * TILE_SIZE;
-  const MAX_X = SCREEN_W / 2 - 2 * TILE_SIZE;
-  const MIN_Y = 2 * TILE_SIZE;
-  const MAX_Y = SCREEN_H - 2 * TILE_SIZE;
-
-  if (powerups[4 * p + 3] === 0) {
-    if (grenadeSpeeds[p] !== 2) {
-      // If grenade speed powerup was active, deactivate it and reset the powerup spawn delay
-      grenadeSpeeds[p] = 2;
-      powerups[4 * p + 3] = POWERUP_DELAY;
-    }
-    else if (powerups[4 * p + 2] === 0) {
-      // Decide whether to generate a powerup or not
-      if (Math.random() < SPAWN_CHANCE) {
-        powerups[4 * p] = (p * SCREEN_W / 2) + MIN_X + Math.random() * (MAX_X - MIN_X) >> 0;
-        powerups[4 * p + 1] = MIN_Y + Math.random() * (MAX_Y - MIN_Y) >> 0;
-        powerups[4 * p + 2] = (Math.random() * 3 >> 0) + 1; // Get number from 1 to 3 inclusive
-        powerups[4 * p + 3] = POWERUP_DELAY / 2;
-      }
-      else {
-        powerups[4 * p + 3] = POWERUP_DELAY;
-      }
-    }
-    else {
-      // Powerup expired
-      powerups[4 * p + 2] = 0;
-      powerups[4 * p + 3] = POWERUP_DELAY;
-    }
-  }
-
-  powerups[4 * p + 3] -= DELTA_TIME;
-  if (powerupMessages[2 * p + 1] !== 0) {
-    powerupMessages[2 * p + 1] -= DELTA_TIME;
-  }
-
-  // Check for player collision
-  if (powerups[4 * p + 2] !== 0) {
-    // Rectangular collision detection
-    if (players[4 * p] - SNAKE_W / 2 < powerups[4 * p] + HALF_POWERUP_SIZE && players[4 * p] + SNAKE_W / 2 > powerups[4 * p] - HALF_POWERUP_SIZE && players[4 * p + 1] - SNAKE_H / 2 < powerups[4 * p + 1] + HALF_POWERUP_SIZE && players[4 * p + 1] + SNAKE_H / 2 > powerups[4 * p + 1] - HALF_POWERUP_SIZE) {
-      // Activate effect
-      if (powerups[4 * p + 2] === 1) {
-        // Tranquilizer
-        tranquilizers[3 * p + 2] = 1;
-        powerupMessages[2 * p] = 1;
-        powerupMessages[2 * p + 1] = MESSAGE_DELAY;
-      }
-      else {
-        // Speed modifier
-        grenadeSpeeds[p] = powerups[4 * p + 2] === 3 ? 3 : 1;
-        // Flash powerup message
-        powerupMessages[2 * p] = powerups[4 * p + 2];
-        powerupMessages[2 * p + 1] = MESSAGE_DELAY;
-      }
-      // Destroy powerup
-      powerups[4 * p + 2] = 0;
-      powerups[4 * p + 3] = POWERUP_DELAY;
-    }
-  }
-}
-function updateTranquilizer(p) {
-  tranquilizers[3 * p] += p === 0 ? 2 : -2;
-  var otherP = p === 0 ? 1 : 0;
-  // Handle collisions
-  if (tranquilizers[3 * p] >= SCREEN_W - TILE_SIZE || tranquilizers[3 * p] < TILE_SIZE) {
-    // Hit the wall
-    tranquilizers[3 * p + 2] = 0;
-  }
-  else if (tranquilizers[3 * p] > players[4 * otherP] - SNAKE_W / 2 && tranquilizers[3 * p] < players[4 * otherP] + SNAKE_W / 2 && tranquilizers[3 * p + 1] > players[4 * otherP + 1] - SNAKE_H / 2 && tranquilizers[3 * p + 1] < players[4 * otherP + 1] + SNAKE_H / 2) {
-    // The tranquilizer's center is inside the player's hitbox
-    asleep[otherP] = SLEEP_DELAY;
-    tranquilizers[3 * p + 2] = 0;
-  }
-}
 // Prerender powerups
 var powerupsCanvas = document.getElementById("powerups");
 var powerupsContext = powerupsCanvas.getContext("2d");
@@ -421,70 +463,6 @@ var grenade = new Uint16Array(6);
 // Speed on player 1 and 2's sides separately
 var grenadeSpeeds = new Uint8Array(2);
 var grenadeState = 0;
-function isGrenadeInPlayer(p) {
-  return players[4 * p] - SNAKE_W / 2 < grenade[0] + GRENADE_SIZE && players[4 * p] + SNAKE_W / 2 > grenade[0] && players[4 * p + 1] - SNAKE_H / 2 < grenade[1] + GRENADE_SIZE && players[4 * p + 1] + SNAKE_H / 2 > grenade[1];
-}
-function explodeGrenade(p) {
-  // Schedule player to lose life
-  lostPlayer = p;
-  // Start grenade explosion animation
-  grenadeState = 1;
-  grenade[4] = 0;
-  grenade[5] = 0;
-  // Sound effect
-  playExplodeSound(p);
-  // Set players' sprites to stand
-  spriteClips[0] = spriteClips[0] > 3 ? 4 : 0;
-  spriteClips[2] = spriteClips[2] > 3 ? 4 : 0;
-  // Stop music
-  music.pause();
-}
-function handleGrenadeCollisions(p) {
-  if (inputs[p].punch) {
-    // Get distances from player
-    var xDist = Math.abs(players[4 * p] - (grenade[0] + GRENADE_SIZE / 2));
-    var yDist = Math.abs(players[4 * p + 1] - (grenade[1] + GRENADE_SIZE / 2));
-    // Deflect grenade if close enough and player facing grenade
-    var deflected = false;
-    if (xDist < SNAKE_W && yDist < SNAKE_H) {
-      if (yDist < SNAKE_H / 2 && spriteClips[2 * p] === 7) {
-        if (grenade[0] < players[4 * p] && spriteClips[2 * p + 1] === 0) {
-          // Grenade to the left, and player facing left
-          grenade[2] = -1;
-          deflected = true;
-        }
-        else if (grenade[0] > players[4 * p] && spriteClips[2 * p + 1] === 1) {
-          // Grenade to the right, and player facing right
-          grenade[2] = 1;
-          deflected = true;
-        }
-      }
-      else if (xDist < SNAKE_W / 2 && spriteClips[2 * p] === 3) {
-        if (grenade[1] < players[4 * p + 1] && spriteClips[2 * p + 1] === 0) {
-          // Grenade to the up, and player facing up
-          grenade[3] = -1;
-          deflected = true;
-        }
-        else if (grenade[1] > players[4 * p + 1] && spriteClips[2 * p + 1] === 1) {
-          // Grenade to the down, and player facing down
-          grenade[3] = 1;
-          deflected = true;
-        }
-      }
-    }
-  }
-
-  if (deflected) {
-    // TODO: This conflicts with the punch sound too much, override punch sound?
-    // playRicochetSound(p);
-  }
-  else {
-    // Blow up grenade on player
-    if (isGrenadeInPlayer(p)) {
-      explodeGrenade(p);
-    }
-  }
-}
 
 const START_DELAY = 600;
 var startCountdown;
@@ -526,294 +504,70 @@ var playersFrames = new Uint16Array([ 0, 0 ]);
 var punchCountdown = new Uint16Array([ 0, 0 ]);
 // x, y for player 1 and 2
 var spriteClips = new Uint8Array(4);
-function updatePlayer(p) {
-  if (asleep[p] > 0) {
-    asleep[p] -= DELTA_TIME;
-    playersFrames[p] += DELTA_TIME;
-    if (playersFrames[p] >= PLAYER_FRAME_MAX) {
-      playersFrames[p] -= PLAYER_FRAME_MAX;
-    }
-  }
 
-  // Only move player if not asleep
-  if (asleep[p] === 0) {
-    // Only move player if not punching
-    if (!inputs[p].punch) {
-      players[4 * p] += players[4 * p + 2];
-      if (players[4 * p] < MIN_X[p]) {
-        players[4 * p] = MIN_X[p];
-      }
-      else if (players[4 * p] > MAX_X[p]) {
-        players[4 * p] = MAX_X[p];
-      }
-      players[4 * p + 1] += players[4 * p + 3];
-      if (players[4 * p + 1] < MIN_Y) {
-        players[4 * p + 1] = MIN_Y;
-      }
-      else if (players[4 * p + 1] > MAX_Y) {
-        players[4 * p + 1] = MAX_Y;
-      }
-      // Update sprite clip
-      playersFrames[p] += DELTA_TIME;
-      if (playersFrames[p] >= PLAYER_FRAME_MAX) {
-        if (players[4 * p + 2]) {
-          // Left/Right
-          spriteClips[2 * p] = spriteClips[2 * p] === 5 ? 6 : 5;
-        }
-        else if (players[4 * p + 3]) {
-          // Up/Down
-          spriteClips[2 * p] = spriteClips[2 * p] === 1 ? 2 : 1;
-        }
-        playersFrames[p] -= PLAYER_FRAME_MAX;
-      }
-    }
-
-    // Update punch countdown
-    if (punchCountdown[p]) {
-      var countdown = punchCountdown[p] - DELTA_TIME;
-      if (countdown < 0) countdown = 0;
-      punchCountdown[p] = countdown;
-
-      if (inputs[p].punch && punchCountdown[p] <= PUNCH_DELAY / 2) {
-        inputs[p].punch = false;
-        // Change sprite clip
-        spriteClips[2 * p] = spriteClips[2 * p] === 3 ? 0 : 4;
-      }
-    }
-  }
-}
-// Handle input
-var inputs = [ {}, {} ];
-function handlePunch(p) {
-  if (punchCountdown[p] === 0 && !inputs[p].punch) {
-    inputs[p].punch = true;
-    // Reflect grenade if close enough
-    punchCountdown[p] = PUNCH_DELAY;
-    updateSpriteClip(p, "punch", true);
-    // Fire tranquilizer
-    if (tranquilizers[3 * p + 2] === 1) {
-      tranquilizers[3 * p] = players[4 * p] + SNAKE_W * (p * -1);
-      tranquilizers[3 * p + 1] = players[4 * p + 1];
-      tranquilizers[3 * p + 2] = 2;
-    }
-    // Sound effect
-    playPunchSound(p);
-  }
-}
-// TODO: update spriteClips more mathematically
-function updateSpriteClip(p, action, keydown) {
-  // Only update if grenade is live
-  if (grenadeState === 0) {
-    if (keydown) {
-      switch (action) {
-        case "up":
-          if (players[4 * p + 2] === 0) {
-            spriteClips[2 * p] = 1;
-            spriteClips[2 * p + 1] = 0;
-          }
-          break;
-        case "down":
-          if (players[4 * p + 2] === 0) {
-            spriteClips[2 * p] = 1;
-            spriteClips[2 * p + 1] = 1;
-          }
-          break;
-        case "left":
-          spriteClips[2 * p] = 5;
-          spriteClips[2 * p + 1] = 0;
-          break;
-        case "right":
-          spriteClips[2 * p] = 5;
-          spriteClips[2 * p + 1] = 1;
-          break;
-        case "punch":
-          spriteClips[2 * p] = spriteClips[2 * p] < 4 ? 3 : 7;
-          break;
-      }
-    }
-    else {
-      // We have to change the y-position of the spriteclip for certain key releases
-      switch (action) {
-        case "left":
-          if (inputs[p].down) {
-            spriteClips[2 * p + 1] = 1;
-          }
-          if (players[4 * p + 3]) {
-            spriteClips[2 * p] = 1;
-          }
-          else {
-            spriteClips[2 * p] = 4;
-          }
-          break;
-        case "right":
-          if (inputs[p].up) {
-            spriteClips[2 * p + 1] = 0;
-          }
-          if (players[4 * p + 3]) {
-            spriteClips[2 * p] = 1;
-          }
-          else {
-            spriteClips[2 * p] = 4;
-          }
-          break;
-        case "up":
-        case "down":
-          if (players[4 * p + 2]) {
-            spriteClips[2 * p] = 4;
-          }
-          else {
-            spriteClips[2 * p] = 0;
-          }
-          break;
-      }
-    }
-  }
-}
-function updatePlayerVel(p, isKeydown) {
-  var xVel = 0;
-  var yVel = 0;
-  if (inputs[p].up) {
-    yVel--;
-  }
-  if (inputs[p].down) {
-    yVel++;
-  }
-  if (inputs[p].left) {
-    xVel--;
-  }
-  if (inputs[p].right) {
-    xVel++;
-  }
-  // Stop player movement if punching
-  if (inputs[p].punch) {
-    if (players[4 * p + 2]) players[4 * p + 2] = 0;
-    if (players[4 * p + 3]) players[4 * p + 3] = 0;
-  }
-  else {
-    players[4 * p + 2] = xVel;
-    players[4 * p + 3] = yVel;
-  }
-}
-// Resets the field once a player loses a life
-function resetField() {
-  inputs[0].up    = false;
-  inputs[0].down  = false;
-  inputs[0].left  = false;
-  inputs[0].up    = false;
-  inputs[0].punch = false;
-
-  inputs[1].up    = false;
-  inputs[1].down  = false;
-  inputs[1].left  = false;
-  inputs[1].up    = false;
-  inputs[1].punch = false;
-
-  players[0] = MIN_X[0] + TILE_SIZE;
-  players[1] = SCREEN_H / 2;
-  players[2] = 0;
-  players[3] = 0;
-
-  players[4] = MAX_X[1] - TILE_SIZE;
-  players[5] = SCREEN_H / 2;
-  players[6] = 0;
-  players[7] = 0;
-
-  spriteClips[0] = 4;
-  spriteClips[1] = 1;
-  spriteClips[2] = 4;
-  spriteClips[3] = 0;
-
-  asleep[0] = 0;
-  asleep[1] = 0;
-
-  grenade[0] = SCREEN_W / 2 - GRENADE_SIZE / 2;
-  grenade[1] = SCREEN_H / 2 - GRENADE_SIZE / 2;
-  grenade[2] = 2 * (2 * Math.random() >> 0) - 1;
-  grenade[3] = 2 * (2 * Math.random() >> 0) - 1;
-  grenade[4] = 0;
-  grenade[5] = 0;
-
-  grenadeState = 0;
-  grenadeSpeeds[0] = 2;
-  grenadeSpeeds[1] = 2;
-
-  powerups[2] = 0;
-  powerups[3] = POWERUP_DELAY;
-  powerups[6] = 0;
-  powerups[7] = POWERUP_DELAY;
-
-  tranquilizers[3] = 0;
-  tranquilizers[5] = 0;
-
-  powerupMessages[0] = 0;
-  powerupMessages[1] = 0;
-  powerupMessages[2] = 0;
-  powerupMessages[3] = 0;
-
-  startCountdown = START_DELAY;
-  // Restart music
-  if (scene === "game") {
-    music.currentTime = 0;
-    music.play();
-  }
-}
-resetField();
-
+const KEY_MAP = {
+  "r"           : "reroll",
+  "ArrowUp"     : "up",
+  "ArrowDown"   : "down",
+  "ArrowLeft"   : "left",
+  "ArrowRight"  : "right",
+  " "           : "punch"
+};
 function handleKeyDown(e) {
-  switch (scene) {
-    case "title":
-      scene = "game";
-      music.currentTime = 0;
-      music.play();
-      break;
-    case "gameover":
-      lives[0] = MAX_LIVES;
-      lives[1] = MAX_LIVES;
-      resetField();
-      scene = "game";
-      prerenderField();
-      music.currentTime = 0;
-      music.play();
-      break;
-  }
-
-  if (!e.altKey && !e.ctrlKey && !e.metaKey) e.preventDefault();
-  if (!e.repeat) {
-    switch (e.key) {
-      // Player 1
-      case "w"          : inputs[0].up    = true; updateSpriteClip(0, "up", true); break;
-      case "s"          : inputs[0].down  = true; updateSpriteClip(0, "down", true); break;
-      case "a"          : inputs[0].left  = true; updateSpriteClip(0, "left", true); break;
-      case "d"          : inputs[0].right = true; updateSpriteClip(0, "right", true); break;
-      case "Tab": handlePunch(0); break;
-      // Player 2
-      case "ArrowUp"    : inputs[1].up    = true; updateSpriteClip(1, "up", true); break;
-      case "ArrowDown"  : inputs[1].down  = true; updateSpriteClip(1, "down", true); break;
-      case "ArrowLeft"  : inputs[1].left  = true; updateSpriteClip(1, "left", true); break;
-      case "ArrowRight" : inputs[1].right = true; updateSpriteClip(1, "right", true); break;
-      case ".": handlePunch(1); break;
+  if (!e.altKey && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    if (!e.repeat) {
+      var action = KEY_MAP[e.key];
+      switch (scene) {
+        case "lobby":
+          switch (action) {
+            case "reroll": socket.emit("reroll name"); break;
+            case "up":
+              if (lobbyCursor > (gamesAvailable ? 0 : 1)) {
+                lobbyCursor--;
+              }
+              break;
+            case "down":
+              if (lobbyCursor < 2) {
+                lobbyCursor++;
+              }
+              break;
+            case "punch":
+              switch (LOBBY_OPTIONS[lobbyCursor]) {
+                case "join game":
+                  if (gamesAvailable) {
+                    socket.emit("join game");
+                  }
+                  else {
+                    // Somehow chose this option when no games available
+                    lobbyCursor = 1;
+                  }
+                  break;
+                case "create game":
+                  if (!waitingForPlayer) {
+                    socket.emit("create game");
+                    waitingForPlayer = true;
+                  }
+                  break;
+                case "vs bot":
+                  // TODO: Design AI player that isn't too hard or easy
+                  break;
+              }
+              break;
+          }
+          break;
+        case "gameover":
+          if (action === "punch") {
+            spriteClips[2 * playerNum] = 7;
+          }
+        default:
+          socket.emit("keydown", { action: action });
+      }
     }
-    updatePlayerVel(0, true);
-    updatePlayerVel(1, true);
   }
 }
 function handleKeyUp(e) {
-  switch (e.key) {
-    // Player 1
-    case "w"          : inputs[0].up    = false; updateSpriteClip(0, "up", false); break;
-    case "s"          : inputs[0].down  = false; updateSpriteClip(0, "down", false); break;
-    case "a"          : inputs[0].left  = false; updateSpriteClip(0, "left", false); break;
-    case "d"          : inputs[0].right = false; updateSpriteClip(0, "right", false); break;
-    case "Tab": break;
-    // Player 2
-    case "ArrowUp"    : inputs[1].up    = false; updateSpriteClip(1, "up", false); break;
-    case "ArrowDown"  : inputs[1].down  = false; updateSpriteClip(1, "down", false); break;
-    case "ArrowLeft"  : inputs[1].left  = false; updateSpriteClip(1, "left", false); break;
-    case "ArrowRight" : inputs[1].right = false; updateSpriteClip(1, "right", false); break;
-    case ".": break;
-  }
-  updatePlayerVel(0, false);
-  updatePlayerVel(1, false);
+  socket.emit("keyup", { action: KEY_MAP[e.key] });
 }
 document.addEventListener("keydown", handleKeyDown);
 document.addEventListener("keyup", handleKeyUp);
@@ -851,11 +605,11 @@ function frameStep(timestamp) {
       // Title
       context.fillStyle = PALETTE[3];
       context.strokeStyle = PALETTE[4];
-      context.font = "128px Fugaz One";
-      context.fillText("Pong", titleX - 8, SCREEN_H / 2 - 112);
-      context.strokeText("Pong", titleX - 8, SCREEN_H / 2 - 112);
-      context.fillText("Gear", titleX + 8, SCREEN_H / 2);
-      context.strokeText("Gear", titleX + 8, SCREEN_H / 2);
+      context.font = "bold 128px Fugaz One, Arial";
+      context.fillText("Pong", titleX - 8, titleY - 112);
+      context.strokeText("Pong", titleX - 8, titleY - 112);
+      context.fillText("Gear", titleX + 8, titleY);
+      context.strokeText("Gear", titleX + 8, titleY);
 
       if (!animateTitle) {
         context.font = "32px Gugi";
@@ -863,21 +617,90 @@ function frameStep(timestamp) {
         context.fillText("Tactical Sports Action", SCREEN_W / 2, SCREEN_H / 2 + 64);
 
         context.font = "24px monospace";
-        context.fillText("Punch the grenade to deflect it; if you", SCREEN_W / 2, SCREEN_H - 160);
-        context.fillText("get hit or the grenade enters your goal, you lose a life", SCREEN_W / 2, SCREEN_H - 128);
         if (frames % 45 < 22) {
-          context.fillText("Press any key to start", SCREEN_W / 2, SCREEN_H - 64);
+          context.fillText("Press any key to start", SCREEN_W / 2, SCREEN_H - 112);
         }
-
-        // Controls
-        context.fillText("Player 1", 160, SCREEN_H / 2 - 48);
-        context.fillText("WASD: move", 160, SCREEN_H / 2);
-        context.fillText("Tab: punch", 160, SCREEN_H / 2 + 28);
-
-        context.fillText("Player 2", SCREEN_W - 160, SCREEN_H / 2 - 48);
-        context.fillText("Arrow keys: move", SCREEN_W - 160, SCREEN_H / 2);
-        context.fillText("Period (.): punch", SCREEN_W - 160, SCREEN_H / 2 + 28);
       }
+      break;
+    case "lobby":
+      context.clearRect(0, 0, SCREEN_W, SCREEN_H);
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, SCREEN_W, SCREEN_H);
+      // Render title
+      while (accumulator >= DELTA_TIME) {
+        accumulator -= DELTA_TIME;
+
+        if (animateTitle) {
+          if (titleX <= 192) {
+            titleX = 192;
+          }
+          else {
+            titleX -= 5;
+          }
+
+          if (titleY <= 256) {
+            titleY = 256;
+          }
+          else {
+            titleY--;
+          }
+          // Stop animating title once it's reached its endpoint
+          if (titleX === 192 && titleY === 256) {
+            animateTitle = false;
+          }
+        }
+      }
+      context.font = "32px Gugi";
+      context.textAlign = "left";
+      context.fillStyle = PALETTE[4];
+      context.strokeStyle = PALETTE[4];
+      if (waitingForPlayer) {
+        context.fillText("Waiting for player...", 480, 256 + 48);
+        // TODO: Render spinner or something
+      }
+      else {
+        // Render options: Join Game (if any available), Create Game, and VS Bot
+        if (gamesAvailable) {
+          context.fillText("Join Game", 480, 256);
+        }
+        else {
+          context.strokeText("Join Game (no games to join)", 480, 256);
+        }
+        context.fillText("Create Game", 480, 256 + 48);
+        context.fillText("VS Bot", 480, 256 + 96);
+        // Render options cursor
+        context.beginPath();
+        context.moveTo(480 - 16, 256 - 12 + lobbyCursor * 48);
+        context.lineTo(480 - 40, 256 - 12 - 8 + lobbyCursor * 48);
+        context.lineTo(480 - 40, 256 - 12 + 8 + lobbyCursor * 48);
+        context.closePath();
+        context.stroke();
+      }
+
+      context.font = "24px Gugi";
+      // Render directions
+      context.fillText("Directives: ", SCREEN_W - 480, 32);
+      context.fillText("Punch the grenade to deflect it; if you", SCREEN_W - 480, 80);
+      context.fillText("get hit or the grenade enters your goal,", SCREEN_W - 480, 112);
+      context.fillText("you lose a life.", SCREEN_W - 480, 144);
+      // Render current name and remaining rerolls
+      context.fillText("Name: " + playerName, 16, SCREEN_H - 112);
+      context.fillText("Press \"r\" to change your name.", 16, SCREEN_H - 64);
+      context.fillText("Remaining rerolls: " + rerolls, 16, SCREEN_H - 32);
+      // Render Controls
+      context.fillText("Game Controls:", SCREEN_W - 256, SCREEN_H - 112);
+      context.fillText("Arrow keys: move", SCREEN_W - 256, SCREEN_H - 64);
+      context.fillText("Spacebar: punch", SCREEN_W - 256, SCREEN_H - 32);
+
+      // Render title
+      context.fillStyle = PALETTE[3];
+      context.strokeStyle = PALETTE[4];
+      context.font = "bold 128px Fugaz One, Arial";
+      context.textAlign = "center";
+      context.fillText("Pong", titleX - 8, titleY - 112);
+      context.strokeText("Pong", titleX - 8, titleY - 112);
+      context.fillText("Gear", titleX + 8, titleY);
+      context.strokeText("Gear", titleX + 8, titleY);
       break;
     case "game":
       // Update loop
@@ -889,134 +712,6 @@ function frameStep(timestamp) {
           if (startCountdown <= 0) {
             startCountdown = 0;
           }
-        }
-        else if (grenadeState === 0) {
-          // Update players
-          updatePlayer(0);
-          updatePlayer(1);
-
-          // Update grenade
-          grenade[0] += grenadeSpeeds[grenade[0] / (SCREEN_W / 2) >> 0] * grenade[2];
-          grenade[1] += grenadeSpeeds[grenade[0] / (SCREEN_W / 2) >> 0] * grenade[3];
-          // Check whether grenade enters a goal
-          if (grenade[0] < goals[0] + GOAL_W && grenade[1] > goals[1] && grenade[1] + GRENADE_SIZE < goals[1] + GOAL_H) {
-            // Player 1 goal
-            explodeGrenade(0);
-          }
-          else if (grenade[0] + GRENADE_SIZE > goals[2] && grenade[1] > goals[3] && grenade[1] + GRENADE_SIZE < goals[3] + GOAL_H) {
-            // Player 2 goal
-            explodeGrenade(1);
-          }
-          else {
-            // Bounce off of walls
-            var bounced = false;
-            if (grenade[1] < TILE_SIZE) {
-              grenade[1] = TILE_SIZE;
-              grenade[3] = 1;
-              bounced = true;
-            }
-            else if (grenade[1] > SCREEN_H - (GRENADE_SIZE + TILE_SIZE)) {
-              grenade[1] = SCREEN_H - (GRENADE_SIZE + TILE_SIZE);
-              grenade[3] = -1;
-              bounced = true;
-            }
-            if (grenade[0] < TILE_SIZE) {
-              grenade[0] = TILE_SIZE;
-              grenade[2] = 1;
-              bounced = true;
-            }
-            else if (grenade[0] > SCREEN_W - (GRENADE_SIZE + TILE_SIZE)) {
-              grenade[0] = SCREEN_W - (GRENADE_SIZE + TILE_SIZE);
-              grenade[2] = -1;
-              bounced = true;
-            }
-
-            if (bounced) {
-              playRicochetSound();
-            }
-          }
-
-          // Handle collisions
-          handleGrenadeCollisions(0);
-          handleGrenadeCollisions(1);
-        }
-
-        if (resetCountdown !== 0) {
-          resetCountdown -= DELTA_TIME;
-          if (resetCountdown <= 0) {
-            resetCountdown === 0;
-            // Reduce player's lives and check whether player lost all lives
-            if (--lives[lostPlayer] === 0) {
-              music.pause();
-              scene = "gameover";
-              winner = 1 - lostPlayer;
-              // Set winning player's spriteclip to running and losing player's spriteclip to standing
-              if (lostPlayer === 0) {
-                spriteClips[0] = 4;
-                spriteClips[2] = 5;
-              }
-              else {
-                spriteClips[0] = 5;
-                spriteClips[2] = 4;
-              }
-              // Player 1 facing right, 2 facing left
-              spriteClips[1] = 1;
-              spriteClips[3] = 0;
-              players[0] = 3 * TILE_SIZE;
-              players[1] = SCREEN_H / 2;
-              players[4] = SCREEN_W - (3 * TILE_SIZE);
-              players[5] = SCREEN_H / 2;
-              // Prerender background
-              prerenderGameover();
-            }
-            // Reset grenade and player positions
-            resetField();
-          }
-        }
-
-        // Update grenade animation clip
-        if (grenadeState !== 2) {
-          grenade[4] += DELTA_TIME;
-          if (grenade[4] === DELTA_TIME * 120) {
-            grenade[4] = 0;
-          }
-          if (grenade[4] === DELTA_TIME * 30) {
-            grenade[4] = 0;
-            grenade[5] += grenadeState === 0 ? 14 : SNAKE_W;
-            switch (grenadeState) {
-              case 0:
-                if (grenade[5] > 42) {
-                  // Reset animation frame so it loops
-                  grenade[5] = 0;
-                }
-                break;
-              case 1:
-                if (grenade[5] === SNAKE_W * 4) {
-                  // End explosion animation
-                  grenadeState = 2;
-                  // Remove firing tranquilizers
-                  if (tranquilizers[2] === 2) tranquilizers[2] = 0;
-                  if (tranquilizers[5] === 2) tranquilizers[5] = 0;
-                  // Start countdown to reset game
-                  resetCountdown = RESET_DELAY;
-                }
-                break;
-            }
-          }
-        }
-
-        if (resetCountdown === 0) {
-          // Update powerups
-          updatePowerup(0);
-          updatePowerup(1);
-        }
-
-        // Update tranquilizers
-        if (tranquilizers[2] === 2) {
-          updateTranquilizer(0);
-        }
-        if (tranquilizers[5] === 2) {
-          updateTranquilizer(1);
         }
       }
 
@@ -1055,6 +750,7 @@ function frameStep(timestamp) {
       }
 
       // Render players
+      context.textAlign = "center";
       context.drawImage(spritesheet, spriteClips[0] * SNAKE_W, spriteClips[1] * SNAKE_H, SNAKE_W, SNAKE_H, players[0] - SNAKE_W / 2, players[1] - SNAKE_H / 2, SNAKE_W, SNAKE_H);
       if (asleep[0]) {
         context.font = (16 + (asleep[0] % 200 < 100 ? 8 : 0)) + "px monospace";
@@ -1097,27 +793,31 @@ function frameStep(timestamp) {
         context.fillText(POWERUP_MESSAGE_TEXT[powerupMessages[2]], 0.75 * SCREEN_W, SCREEN_H / 2 + 8);
       }
       // Lives
-      context.strokeText("Player 1: ", 2.25 * TILE_SIZE, 22);
-      context.fillText("Player 1: ", 2.25 * TILE_SIZE, 22);
-      context.strokeText("Player 2: ", SCREEN_W / 2 + 2.25 * TILE_SIZE, 22);
-      context.fillText("Player 2: ", SCREEN_W / 2 + 2.25 * TILE_SIZE, 22);
+      context.textAlign = "right";
+      context.strokeText(names[0] + ": ", 160, 22);
+      context.fillText(names[0] + ": ", 160, 22);
+      context.strokeText(names[1] + ": ", SCREEN_W / 2 + 160, 22);
+      context.fillText(names[1] + ": ", SCREEN_W / 2 + 160, 22);
       // Lives as heads
       for (var i = 0; i < lives[0]; i++) {
-        context.drawImage(head, 128 + i * head.width * 1.5, 8);
+        context.drawImage(head, 168 + i * head.width * 1.5, 8);
       }
       for (var i = 0; i < lives[1]; i++) {
-        context.drawImage(head, SCREEN_W / 2 + 128 + i * head.width * 1.5, 8);
+        context.drawImage(head, SCREEN_W / 2 + 168 + i * head.width * 1.5, 8);
       }
+      context.lineWidth = 2;
       break;
     case "gameover":
       while (accumulator >= DELTA_TIME) {
         accumulator -= DELTA_TIME;
 
-        // Animate player
-        playersFrames[winner] += DELTA_TIME;
-        if (playersFrames[winner] >= 180) {
-          playersFrames[winner] -= 180;
-          spriteClips[2 * winner] = spriteClips[2 * winner] === 5 ? 6 : 5;
+        if (spriteClips[2 * winner] !== 7) {
+          // Animate player
+          playersFrames[winner] += DELTA_TIME;
+          if (playersFrames[winner] >= 180) {
+            playersFrames[winner] -= 180;
+            spriteClips[2 * winner] = spriteClips[2 * winner] === 5 ? 6 : 5;
+          }
         }
       }
       // Background
