@@ -279,7 +279,7 @@ for (var i = 0; i < TRANQUILIZER_PIXELS.length; i++) {
     powerupsContext.fillRect(preX + 2 * (i % 11), (preY + 2 * (i / 11 >> 0)) + 16, 2, 2);
   }
 }
-powerupsContext.font = "16px Gugi";
+powerupsContext.font = "16px Gugi, arial, sans-serif";
 powerupsContext.textAlign = "center";
 // Slow field
 powerupsContext.beginPath();

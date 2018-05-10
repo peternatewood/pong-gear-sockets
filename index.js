@@ -142,7 +142,7 @@ io.on("connection", (socket) => {
                 // Flag this player as wanting rematch, and only reset if both players are willing, or the other player is a bot
                 Game.setWantsRematch(game, playerNum);
                 socket.broadcast.to(room).emit("wants rematch", playerNum);
-                if ((game.wantsRematch[0] || bots[0]) && (game.wantsRematch[1] || bots[1])) {
+                if ((game.wantsRematch[0] || game.bots[0]) && (game.wantsRematch[1] || game.bots[1])) {
                   Game.reset(game);
                   io.to(room).emit("rematch", Game.getData(game));
                 }
