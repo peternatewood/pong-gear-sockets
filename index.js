@@ -101,6 +101,10 @@ Add player to existing game, or if no games, create a new game with the user as 
 var waitingGames = [];
 var games = [];
 
+function playSound(room, sound, p) {
+  io.to(room).emit("play sound", sound, p);
+}
+
 // Run update loop for all games
 var intervalID = setInterval(() => {
   for (var i = 0; i < games.length; i++) {
@@ -194,7 +198,7 @@ io.on("connection", (socket) => {
       // Create a new game
       playerNum = 0;
       room = (Date.now()).toString();
-      game = new Game(io, name, room, 0);
+      game = new Game(io, name, room, 0, playSound);
       console.log("Game room %d", game.room);
       socket.join(room);
       waitingGames.push(game);
@@ -237,7 +241,7 @@ io.on("connection", (socket) => {
     playerNum = 0;
     room = (Date.now()).toString();
     socket.join(room);
-    game = new Game(io, name, room, 1);
+    game = new Game(io, name, room, 1, playSound);
     console.log("New bot match in room %d", room);
     gameIndex = games.length - 1;
     var botName = generatePlayerName();

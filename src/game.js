@@ -14,13 +14,14 @@ TODOS:
 + Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
   - Simulate game on both client- and server-side with some way to regularly sync?
 */
-function Game(io, name, roomNum, numberOfBots) {
+function Game(io, name, roomNum, numberOfBots, playSoundCallback) {
   // Provide access to io so we can broadcast changes to the players
   // this.io = io;
   this.room = roomNum;
   this.names = [ name, "" ];
   this.wantsRematch = [ false, false ];
   this.bots = [ numberOfBots > 1, numberOfBots > 0 ]; // 1 bot means, second player is a bot, 2 bots means both are;
+  console.log("Bots %s %s", this.bots[0] ? "Yes" : "No", this.bots[1] ? "Yes" : "No");
   // this.botTarget = new Uint16Array([ 0.25 * Game.SCREEN_W, Game.SCREEN_H / 2, 0.75 * Game.SCREEN_W, Game.SCREEN_H / 2 ]); // x, y coordinates where the bot(s) will try to move
   this.botTarget = new Uint16Array(4); // x, y coordinates where the bot(s) will try to move
   this.botReliableHits = Game.BOT_HITS;
@@ -73,7 +74,9 @@ function Game(io, name, roomNum, numberOfBots) {
 
   this.inputs = [ {}, {} ];
 
-  Game.resetField(this); // Set initial values
+  this.playSound = playSoundCallback;
+
+  // Game.resetField(this); // Set initial values
 
   return this;
 }
@@ -121,6 +124,7 @@ Game.addPlayer = (g, name) => {
   // g.io.to(g.room).emit("game ready", g.names);
   g.scene = "game";
   // g.io.to(g.room).emit("game ready", );
+  Game.resetField(g);
 }
 Game.setWantsRematch = (g, p) => {
   g.wantsRematch[p] = true;
@@ -253,6 +257,9 @@ Game.explodeGrenade = (g, p) => {
   // Set players' sprites to stand
   g.spriteClips[0] = g.spriteClips[0] > 3 ? 4 : 0;
   g.spriteClips[2] = g.spriteClips[2] > 3 ? 4 : 0;
+
+  g.playSound(g.room, "pause");
+  g.playSound(g.room, "explosion", p);
 }
 Game.handleGrenadeCollisions = (g, p) => {
   if (g.inputs[p].punch) {
@@ -512,6 +519,8 @@ Game.handlePunch = (g, p) => {
       g.tranquilizers[3 * p + 1] = g.players[4 * p + 1];
       g.tranquilizers[3 * p + 2] = 2;
     }
+
+    g.playSound(g.room, "punch", p);
   }
 }
 // TODO: update spriteClips on client-side
@@ -680,10 +689,11 @@ Game.resetField = (g) => {
 
   g.startCountdown = Game.START_DELAY;
   // // Restart music
-  // if (g.scene === "game") {
+  if (g.scene === "game") {
   //   music.currentTime = 0;
   //   music.play();
-  // }
+    g.playSound(g.room, "play");
+  }
 }
 // Rather than using bind to keep the Game instance context, we pass the game as a parameter
 Game.handleKeyDown = (g, p, action) => {
@@ -799,6 +809,7 @@ Game.update = (g) => {
 
             if (bounced) {
               // playRicochetSound();
+              g.playSound(g.room, "ricochet");
               if (g.bots[0]) {
                 Game.setBotTarget(g, 0);
               }
@@ -820,6 +831,7 @@ Game.update = (g) => {
             // Reduce player's lives and check whether player lost all lives
             if (--g.lives[g.lostPlayer] === 0) {
               // music.pause();
+              g.playSound(g.room, "pause");
               g.scene = "gameover";
               g.winner = 1 - g.lostPlayer;
               // Set winning player's spriteclip to running and losing player's spriteclip to standing
