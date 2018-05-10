@@ -12,15 +12,17 @@
 TODOS:
 + Only update spriteClips clientside
 + Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
+  - Simulate game on both client- and server-side with some way to regularly sync?
 */
-function Game(io, name, roomNum, vsBot) {
+function Game(io, name, roomNum, numberOfBots) {
   // Provide access to io so we can broadcast changes to the players
   // this.io = io;
   this.room = roomNum;
   this.names = [ name, "" ];
   this.wantsRematch = [ false, false ];
-  this.vsBot = vsBot;
-  this.botTarget = new Uint16Array([ 0.75 * Game.SCREEN_W, Game.SCREEN_H / 2 ]); // x, y coordinates where the bot will try to move
+  this.bots = [ numberOfBots > 1, numberOfBots > 0 ]; // 1 bot means, second player is a bot, 2 bots means both are;
+  // this.botTarget = new Uint16Array([ 0.25 * Game.SCREEN_W, Game.SCREEN_H / 2, 0.75 * Game.SCREEN_W, Game.SCREEN_H / 2 ]); // x, y coordinates where the bot(s) will try to move
+  this.botTarget = new Uint16Array(4); // x, y coordinates where the bot(s) will try to move
   this.botReliableHits = Game.BOT_HITS;
 
   this.lastTimestamp = Date.now();
@@ -99,7 +101,7 @@ Game.BOT_HITS = 5;
 Game.BOT_HIT_CHANCE = 0.95;
 
 Game.SPAWN_CHANCE = 0.25;
-Game.POWERUP_DELAY = 3000;
+Game.POWERUP_DELAY = 5000;
 Game.POWERUP_RADIUS = 12;
 Game.POWERUP_SIZE = 32;
 Game.HALF_POWERUP_SIZE = Game.POWERUP_SIZE / 2;
@@ -183,7 +185,7 @@ Game.updatePowerup = (g, p) => {
       g.powerups[4 * p + 3] = Game.POWERUP_DELAY;
     }
   }
-};
+}
 Game.updateTranquilizer = (g, p) => {
   g.tranquilizers[3 * p] += p === 0 ? 2 : -2;
   var otherP = p === 0 ? 1 : 0;
@@ -192,15 +194,55 @@ Game.updateTranquilizer = (g, p) => {
     // Hit the wall
     g.tranquilizers[3 * p + 2] = 0;
   }
-  else if (g.tranquilizers[3 * p] > g.players[4 * otherP] - SNAKE_W / 2 && g.tranquilizers[3 * p] < g.players[4 * otherP] + SNAKE_W / 2 && g.tranquilizers[3 * p + 1] > g.players[4 * otherP + 1] - Game.SNAKE_H / 2 && g.tranquilizers[3 * p + 1] < g.players[4 * otherP + 1] + Game.SNAKE_H / 2) {
+  else if (g.tranquilizers[3 * p] > g.players[4 * otherP] - Game.SNAKE_W / 2 && g.tranquilizers[3 * p] < g.players[4 * otherP] + Game.SNAKE_W / 2 && g.tranquilizers[3 * p + 1] > g.players[4 * otherP + 1] - Game.SNAKE_H / 2 && g.tranquilizers[3 * p + 1] < g.players[4 * otherP + 1] + Game.SNAKE_H / 2) {
     // The tranquilizer's center is inside the player's hitbox
     g.asleep[otherP] = Game.SLEEP_DELAY;
     g.tranquilizers[3 * p + 2] = 0;
   }
-};
-Game.isGrenadeInPlayer = (g, p) => {
-  return g.players[4 * p] - Game.SNAKE_W / 2 < g.grenade[0] + Game.GRENADE_SIZE && g.players[4 * p] + Game.SNAKE_W / 2 > g.grenade[0] && g.players[4 * p + 1] - Game.SNAKE_H / 2 < g.grenade[1] + Game.GRENADE_SIZE && g.players[4 * p + 1] + Game.SNAKE_H / 2 > g.grenade[1];
-};
+}
+// Game.isGrenadeInPlayer = (g, p) => {
+//   return g.players[4 * p] - Game.SNAKE_W / 2 < g.grenade[0] + Game.GRENADE_SIZE && g.players[4 * p] + Game.SNAKE_W / 2 > g.grenade[0] && g.players[4 * p + 1] - Game.SNAKE_H / 2 < g.grenade[1] + Game.GRENADE_SIZE && g.players[4 * p + 1] + Game.SNAKE_H / 2 > g.grenade[1];
+// }
+Game.handleGrenadeWallCollisions = (grenade) => {
+  if (grenade[1] < Game.TILE_SIZE) {
+    grenade[1] = Game.TILE_SIZE;
+    grenade[3] = 1;
+  }
+  else if (grenade[1] > Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+    grenade[1] = Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+    grenade[3] = -1;
+  }
+  if (grenade[0] < Game.TILE_SIZE) {
+    grenade[0] = Game.TILE_SIZE;
+    grenade[2] = 1;
+  }
+  else if (grenade[0] > Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+    grenade[0] = Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+    grenade[2] = -1;
+  }
+}
+Game.isGrenadeInPlayer = (g, grenade, p) => {
+  return g.players[4 * p] - 0.4 * Game.SNAKE_W < grenade[0] + Game.GRENADE_SIZE && g.players[4 * p] + 0.4 * Game.SNAKE_W > grenade[0] && g.players[4 * p + 1] - 0.4 * Game.SNAKE_H < grenade[1] + Game.GRENADE_SIZE && g.players[4 * p + 1] + 0.4 * Game.SNAKE_H > grenade[1];
+}
+Game.isGrenadeInPunchRange = (g, grenade, p) => {
+  // Get distances from player
+  var xDist = Math.abs(g.players[4 * p] - (grenade[0] + Game.GRENADE_SIZE / 2));
+  var yDist = Math.abs(g.players[4 * p + 1] - (grenade[1] + Game.GRENADE_SIZE / 2));
+
+  return xDist < 0.75 * Game.SNAKE_W && yDist < 0.75 * Game.SNAKE_H;
+}
+// Return which goal the grenade is in, or 2 if not in a goal
+Game.isGrenadeInGoal = (g, grenade) => {
+  if (grenade[0] < g.goals[0] + Game.GOAL_W && grenade[1] > g.goals[1] && grenade[1] + Game.GRENADE_SIZE < g.goals[1] + Game.GOAL_H) {
+    // Player 1 goal
+    return 0;
+  }
+  else if (grenade[0] + Game.GRENADE_SIZE > g.goals[2] && grenade[1] > g.goals[3] && grenade[1] + Game.GRENADE_SIZE < g.goals[3] + Game.GOAL_H) {
+    // Player 2 goal
+    return 1;
+  }
+  return 2;
+}
 Game.explodeGrenade = (g, p) => {
   // Schedule player to lose life
   g.lostPlayer = p;
@@ -219,7 +261,8 @@ Game.handleGrenadeCollisions = (g, p) => {
     var yDist = Math.abs(g.players[4 * p + 1] - (g.grenade[1] + Game.GRENADE_SIZE / 2));
     // Deflect Grenade if close enough and player facing grenade
     var deflected = false;
-    if (xDist < Game.SNAKE_W && yDist < Game.SNAKE_H) {
+    // if (xDist < Game.SNAKE_W && yDist < Game.SNAKE_H) {
+    if (Game.isGrenadeInPunchRange(g, g.grenade, p)) {
       if (yDist < Game.SNAKE_H / 2 && g.spriteClips[2 * p] === 7) {
         if (g.grenade[0] < g.players[4 * p] && g.spriteClips[2 * p + 1] === 0) {
           // Grenade to the left, and player facing left
@@ -250,17 +293,16 @@ Game.handleGrenadeCollisions = (g, p) => {
   if (deflected) {
     // TODO: This conflicts with the punch sound too much, override punch sound?
     // playRicochetSound(p);
-    if (p === 0 && g.vsBot) {
-      Game.setBotTarget(g);
-    }
+    g.grenade[0] += g.grenade[2];
+    g.grenade[1] += g.grenade[3];
   }
   else {
     // Blow up grenade on player
-    if (Game.isGrenadeInPlayer(g, p)) {
+    if (Game.isGrenadeInPlayer(g, g.grenade, p)) {
       Game.explodeGrenade(g, p);
     }
   }
-};
+}
 Game.updatePlayer = (g, p) => {
   if (g.asleep[p] > 0) {
     g.asleep[p] -= Game.DELTA_TIME;
@@ -316,7 +358,7 @@ Game.updatePlayer = (g, p) => {
       }
     }
   }
-};
+}
 /*
 Bot Behavior
 + Bot is always second player (index 1)
@@ -325,150 +367,137 @@ Bot Behavior
 + If grenade approaching goal, bot turns to face it
   Otherwise, bot tries to avoid grenade
 */
-Game.setBotTarget = (g) => {
+Game.setBotTarget = (g, p) => {
   // Range of coordinates where the botTarget can be
-  const MIN_X = Game.SCREEN_W / 2 + 2 * Game.TILE_SIZE;
-  const MAX_X = Game.SCREEN_W - 2 * Game.TILE_SIZE;
-  const MIN_Y = 2 * Game.TILE_SIZE;
-  const MAX_Y = Game.SCREEN_H - 2 * Game.TILE_SIZE;
+  var minX = Game.SCREEN_W / 2 + 2 * Game.TILE_SIZE;
 
   const MAX_ITERATIONS = 1000;
 
-  if (g.grenade[2] > 0) {
-    // Simulate grenade movement toward bot's goal until it enters a certain area
-    var simGrenade = new Uint16Array([ g.grenade[0], g.grenade[1], g.grenade[2], g.grenade[3] ]);
-    var i = 0;
-    // while (i++ < MAX_ITERATIONS && simGrenade[0] < MIN_X && simGrenade[0] > MAX_X && simGrenade[1] < MIN_Y && simGrenade[1] > MAX_Y) {
-    while (g.grenade[2] > 0 && simGrenade[0] < MIN_X) {
+  var simGrenade = new Int16Array([ g.grenade[0], g.grenade[1], g.grenade[2], g.grenade[3] ]);
+  var hitGoal = false;
+  // Simulate grenade movement toward bot's goal
+  while ((p === 0 && simGrenade[2] < 0) || (p === 1 && simGrenade[2] > 0)) {
+    simGrenade[0] += simGrenade[2];
+    simGrenade[1] += simGrenade[3];
+
+    var goalNum = Game.isGrenadeInGoal(g, simGrenade);
+    if (goalNum < 2) {
+      // Grenade hits bot's goal
+      hitGoal = goalNum === p;
+      break;
+    }
+
+    Game.handleGrenadeWallCollisions(simGrenade);
+  }
+
+  if (hitGoal) {
+    // Move ahead of the goal so the bot punches horizontally
+    if (p === 0) {
+      g.botTarget[2 * p] = ((simGrenade[0] + Game.GRENADE_SIZE / 2) - simGrenade[2] * Game.SNAKE_W) - Game.SNAKE_W / 2;
+      g.botTarget[2 * p + 1] = (simGrenade[1] + Game.GRENADE_SIZE / 2) - simGrenade[3] * Game.SNAKE_W;
+    }
+    else {
+      g.botTarget[2 * p] = ((simGrenade[0] + Game.GRENADE_SIZE / 2) - simGrenade[2] * Game.SNAKE_W) + Game.SNAKE_W / 2;
+      g.botTarget[2 * p + 1] = (simGrenade[1] + Game.GRENADE_SIZE / 2) - simGrenade[3] * Game.SNAKE_W;
+    }
+  }
+  else {
+    // Avoid grenade
+    // Simulate grenade movement away from bot's goal; if it hits bot, set target away, otherwise don't move
+    simGrenade = new Int16Array([ g.grenade[0], g.grenade[1], g.grenade[2], g.grenade[3] ]);
+    while (simGrenade[0] > minX) {
       simGrenade[0] += simGrenade[2];
       simGrenade[1] += simGrenade[3];
 
-      if (simGrenade[1] < Game.TILE_SIZE) {
-        simGrenade[1] = Game.TILE_SIZE;
-        simGrenade[3] = 1;
+      if (Game.isGrenadeInPlayer(g, simGrenade, p)) {
+        if (p === 0) {
+          g.botTarget[2 * p] = 0.25 * Game.SCREEN_W;
+        }
+        else {
+          g.botTarget[2 * p] = 0.75 * Game.SCREEN_W;
+        }
+        g.botTarget[2 * p + 1] = Game.SCREEN_H / 2 + (Game.SCREEN_H / 2 - simGrenade[1]) + Game.GRENADE_SIZE / 2;
+        break;
       }
-      else if (simGrenade[1] > Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
-        simGrenade[1] = Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE);
-        simGrenade[3] = -1;
-      }
-      if (simGrenade[0] > Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
-        simGrenade[0] = Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE);
-        simGrenade[2] = -1;
-      }
-   }
-
-    g.botTarget[0] = simGrenade[0];
-    g.botTarget[1] = simGrenade[1];
-    console.log("Bot Target: %d %d", g.botTarget[0], g.botTarget[1]);
-  }
-  else {
-    // Avoid grenade
-    // g.botTarget[0] = 0.75 * Game.SCREEN_W;
-    // g.botTarget[1] = Game.SCREEN_H / 2;
-    g.botTarget[0] = g.players[4];
-    g.botTarget[1] = g.players[5];
+      Game.handleGrenadeWallCollisions(simGrenade);
+    }
   }
 
-  // Game.updateSpriteClip(g, 1, action, keydown);
   // Update sprite clip and velocity
-  if (g.botTarget[1] !== g.players[5]) {
-    g.spriteClips[2] = 1;
-    if (g.botTarget[1] > g.players[5]) {
-      g.spriteClips[3] = 1;
-      g.players[7] = 1;
+  if (g.botTarget[2 * p + 1] !== g.players[4 * p + 1]) {
+    g.spriteClips[2 * p] = 1;
+    if (g.botTarget[2 * p + 1] > g.players[4 * p + 1]) {
+      g.spriteClips[2 * p + 1] = 1;
+      g.players[4 * p + 3] = 1;
     }
-    else if (g.botTarget[1] < g.players[5]) {
-      g.spriteClips[3] = 0;
-      g.players[7] = -1;
+    else if (g.botTarget[2 * p + 1] < g.players[4 * p + 1]) {
+      g.spriteClips[2 * p + 1] = 0;
+      g.players[4 * p + 3] = -1;
     }
   }
-  if (g.botTarget[0] !== g.players[4]) {
-    g.spriteClips[2] = 5;
-    if (g.botTarget[0] > g.players[4]) {
-      g.spriteClips[3] = 1;
-      g.players[6] = 1;
+  if (g.botTarget[2 * p] !== g.players[4 * p]) {
+    g.spriteClips[2 * p] = 5;
+    if (g.botTarget[2 * p] > g.players[4 * p]) {
+      g.spriteClips[2 * p + 1] = 1;
+      g.players[4 * p + 2] = 1;
     }
-    else if (g.botTarget[0] < g.players[4]) {
-      g.spriteClips[3] = 0;
-      g.players[6] = -1;
+    else if (g.botTarget[2 * p] < g.players[4 * p]) {
+      g.spriteClips[2 * p + 1] = 0;
+      g.players[4 * p + 2] = -1;
     }
   }
 }
-Game.updateBot = (g) => {
-  // var action = "";
-  // var keydown = true;
-
-  // Get distances between bot and grenade
-  var xDist = Math.abs(g.players[4] - (g.grenade[0] + Game.GRENADE_SIZE / 2));
-  var yDist = Math.abs(g.players[5] - (g.grenade[1] + Game.GRENADE_SIZE / 2));
-
-  if (g.grenade[2] > 0) {
+Game.updateBot = (g, p) => {
+  // Only try to punch if not already punching
+  if (!g.inputs[p].punch) {
+    // Get distances between bot and grenade
+    var left   = g.grenade[0] + g.grenade[2];
+    var right  = (g.grenade[0] + g.grenade[2]) + Game.GRENADE_SIZE;
+    var top    = g.grenade[1] + g.grenade[3];
+    var bottom = (g.grenade[1] + g.grenade[3]) + Game.GRENADE_SIZE;
     // Intercept and punch grenade
-    if (xDist < Game.SNAKE_W && yDist < Game.SNAKE_H) {
-      // Grenade is in punching distance
-      // Turn to face grenade
-      if (xDist < yDist) {
-        g.spriteClips[2] = 4;
+    if (Game.isGrenadeInPunchRange(g, [ left, top ], p)) {
+      // After the number of reliable hits, the bot may miss
+      if (g.botReliableHits > 0 || Math.random() < Game.BOT_HIT_CHANCE) {
+        // var xDist = Math.abs(g.players[4 * p] - (left + Game.GRENADE_SIZE / 2));
+        var yDist = Math.abs(g.players[4 * p + 1] - (top + Game.GRENADE_SIZE / 2));
 
-        if (g.grenade[0] < g.players[4]) {
-          // Grenade to the left, turn to face left
-          g.spriteClips[3] = 0;
+        if (yDist < Game.SNAKE_H / 2) {
+          // Aim left/right
+          g.spriteClips[2 * p] = 7;
+          g.spriteClips[2 * p + 1] = g.grenade[0] < g.players[4 * p] ? 0 : 1;
         }
-        else if (g.grenade[0] > g.players[4]) {
-          // Grenade to the right, turn to face right
-          g.spriteClips[3] = 1;
+        else {
+          // Aim up/down
+          g.spriteClips[2 * p] = 3;
+          g.spriteClips[2 * p + 1] = g.grenade[1] < g.players[4 * p + 1] ? 0 : 1;
         }
+        Game.handlePunch(g, p);
       }
       else {
-        g.spriteClips[2] = 0;
-
-        if (g.grenade[1] < g.players[5]) {
-          // Grenade is up, turn to face up
-          g.spriteClips[3] = 0;
-        }
-        else if (g.grenade[1] > g.players[5]) {
-          // Grenade is down, turn to face down
-          g.spriteClips[3] = 1;
-        }
+        // Set punch countdown so bot doesn't try to punch again the next frame
+        g.punchCountdown[p] = Game.PUNCH_DELAY;
       }
-      Game.handlePunch(g, 1);
+
+      if (g.botReliableHits > 0) {
+        g.botReliableHits--;
+      }
     }
-    // else if (g.grenade[0] > Game.SCREEN_W * 0.25) {
-    //   // Move to intercept grenade
-    //   g.botTarget;
-    // }
-  }
-  else {
-    // Avoid grenade
   }
 
   // Stop if target reached
-  if (g.players[6] && g.players[4] === g.botTarget[0]) {
-    // if (g.players[7] === 0) {
-    //   g.spriteClips[2] = 4;
-    // }
-    g.players[6] = 0;
-  }
-  if (g.players[7] && g.players[5] === g.botTarget[1]) {
-    // if (g.players[6] === 0) {
-    //   g.spriteClips[2] = 0;
-    // }
-    g.players[7] = 0;
-  }
-
-  if (g.players[6] === 0 && g.players[7] === 0) {
-    // Turn to face grenade
-    if (yDist > xDist) {
-      g.spriteClips[2] = 0;
-      g.spriteClips[3] = g.grenade[1] < g.players[5] ? 0 : 1;
+  if (g.players[4 * p + 2] && g.players[4 * p] === g.botTarget[2 * p]) {
+    if (g.players[7] === 0) {
+      g.spriteClips[2 * p] = 4;
     }
-    else {
-      g.spriteClips[2] = 4;
-      g.spriteClips[3] = g.grenade[0] < g.players[4] ? 0 : 1;
-    }
+    g.players[4 * p + 2] = 0;
   }
-
-  // Game.updateSpriteClip(g, 1, action, keydown);
+  if (g.players[4 * p + 3] && g.players[4 * p + 1] === g.botTarget[2 * p + 1]) {
+    if (g.players[4 * p + 2] === 0) {
+      g.spriteClips[2 * p] = 0;
+    }
+    g.players[4 * p + 3] = 0;
+  }
 }
 // Handle input
 Game.handlePunch = (g, p) => {
@@ -484,12 +513,17 @@ Game.handlePunch = (g, p) => {
       g.tranquilizers[3 * p + 2] = 2;
     }
   }
-};
+}
 // TODO: update spriteClips on client-side
 Game.updateSpriteClip = (g, p, action, keydown) => {
   // Only update if grenade is live
   if (g.grenadeState === 0) {
-    if (keydown) {
+    if (g.inputs[p].punch) {
+      if (action === "punch" && keydown) {
+        g.spriteClips[2 * p] = g.spriteClips[2 * p] < 4 ? 3 : 7;
+      }
+    }
+    else if (keydown) {
       switch (action) {
         case "up":
           if (g.players[4 * p + 2] === 0) {
@@ -512,7 +546,6 @@ Game.updateSpriteClip = (g, p, action, keydown) => {
           g.spriteClips[2 * p + 1] = 1;
           break;
         case "punch":
-          g.spriteClips[2 * p] = g.spriteClips[2 * p] < 4 ? 3 : 7;
           break;
       }
     }
@@ -553,7 +586,7 @@ Game.updateSpriteClip = (g, p, action, keydown) => {
       }
     }
   }
-};
+}
 Game.updatePlayerVel = (g, p, isKeydown) => {
   var xVel = 0;
   var yVel = 0;
@@ -610,6 +643,16 @@ Game.resetField = (g) => {
 
   g.asleep[0] = 0;
   g.asleep[1] = 0;
+
+  g.botTarget[0] = g.players[0];
+  g.botTarget[1] = g.players[1];
+  g.botTarget[2] = g.players[4];
+  g.botTarget[3] = g.players[5];
+
+  Game.setBotTarget(g, 0);
+  Game.setBotTarget(g, 1);
+
+  g.botReliableHits = Game.BOT_HITS;
 
   g.grenade[0] = Game.SCREEN_W / 2 - Game.GRENADE_SIZE / 2;
   g.grenade[1] = Game.SCREEN_H / 2 - Game.GRENADE_SIZE / 2;
@@ -710,8 +753,11 @@ Game.update = (g) => {
         }
         else if (g.grenadeState === 0) {
           // Update bot logic if a bot match
-          if (g.vsBot) {
-            Game.updateBot(g);
+          if (g.bots[0]) {
+            Game.updateBot(g, 0);
+          }
+          if (g.bots[1]) {
+            Game.updateBot(g, 1);
           }
 
           // Update players
@@ -722,13 +768,10 @@ Game.update = (g) => {
           g.grenade[0] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[2];
           g.grenade[1] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[3];
           // Check whether grenade enters a goal
-          if (g.grenade[0] < g.goals[0] + Game.GOAL_W && g.grenade[1] > g.goals[1] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[1] + Game.GOAL_H) {
-            // Player 1 goal
-            Game.explodeGrenade(g, 0);
-          }
-          else if (g.grenade[0] + Game.GRENADE_SIZE > g.goals[2] && g.grenade[1] > g.goals[3] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[3] + Game.GOAL_H) {
-            // Player 2 goal
-            Game.explodeGrenade(g, 1);
+          var goal = Game.isGrenadeInGoal(g, g.grenade);
+
+          if (goal < 2) {
+            Game.explodeGrenade(g, goal);
           }
           else {
             // Bounce off of walls
@@ -756,7 +799,12 @@ Game.update = (g) => {
 
             if (bounced) {
               // playRicochetSound();
-              Game.setBotTarget(g);
+              if (g.bots[0]) {
+                Game.setBotTarget(g, 0);
+              }
+              if (g.bots[1]) {
+                Game.setBotTarget(g, 1);
+              }
             }
           }
 

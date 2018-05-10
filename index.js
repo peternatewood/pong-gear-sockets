@@ -137,10 +137,10 @@ io.on("connection", (socket) => {
             // Rematch or return to lobby
             switch (data.action) {
               case "punch":
-                // Flag this player as wanting rematch, and only reset if both players are willing
+                // Flag this player as wanting rematch, and only reset if both players are willing, or the other player is a bot
                 Game.setWantsRematch(game, playerNum);
                 socket.broadcast.to(room).emit("wants rematch", playerNum);
-                if (game.wantsRematch[0] && game.wantsRematch[1]) {
+                if ((game.wantsRematch[0] || bots[0]) && (game.wantsRematch[1] || bots[1])) {
                   Game.reset(game);
                   io.to(room).emit("rematch", Game.getData(game));
                 }
@@ -194,7 +194,7 @@ io.on("connection", (socket) => {
       // Create a new game
       playerNum = 0;
       room = (Date.now()).toString();
-      game = new Game(io, name, room);
+      game = new Game(io, name, room, 0);
       console.log("Game room %d", game.room);
       socket.join(room);
       waitingGames.push(game);
@@ -237,7 +237,7 @@ io.on("connection", (socket) => {
     playerNum = 0;
     room = (Date.now()).toString();
     socket.join(room);
-    game = new Game(io, name, room, true);
+    game = new Game(io, name, room, 1);
     console.log("New bot match in room %d", room);
     gameIndex = games.length - 1;
     var botName = generatePlayerName();
