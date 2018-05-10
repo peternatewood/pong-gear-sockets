@@ -899,6 +899,8 @@ Game.reset = (g) => {
   Game.resetField(g);
 
   g.scene = "game";
+  g.accumulator = Game.DELTA_TIME;
+  g.lastTimestamp = Date.now();
   g.wantsRematch[0] = false;
   g.wantsRematch[1] = false;
   g.lives[0] = 5;
