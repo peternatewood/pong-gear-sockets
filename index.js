@@ -95,9 +95,7 @@ app.get("/", (request, response) => {
   response.sendFile(path.join(__dirname, 'public/index.html'));
 });
 
-/*
-Add player to existing game, or if no games, create a new game with the user as player 1
-*/
+// Add player to existing game, or if no games, create a new game with the user as the first player (player 0)
 var waitingGames = [];
 var games = [];
 
@@ -198,8 +196,8 @@ io.on("connection", (socket) => {
       // Create a new game
       playerNum = 0;
       room = (Date.now()).toString();
-      game = new Game(io, name, room, 0, playSound);
-      console.log("Game room %d", game.room);
+      game = new Game(name, room, 0, playSound);
+      console.log("New game waiting in room %d", game.room);
       socket.join(room);
       waitingGames.push(game);
       gameIndex = waitingGames.length - 1;
@@ -241,7 +239,7 @@ io.on("connection", (socket) => {
     playerNum = 0;
     room = (Date.now()).toString();
     socket.join(room);
-    game = new Game(io, name, room, 1, playSound);
+    game = new Game(name, room, 1, playSound);
     console.log("New bot match in room %d", room);
     gameIndex = games.length - 1;
     var botName = generatePlayerName();

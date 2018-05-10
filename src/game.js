@@ -14,15 +14,12 @@ TODOS:
 + Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
   - Simulate game on both client- and server-side with some way to regularly sync?
 */
-function Game(io, name, roomNum, numberOfBots, playSoundCallback) {
-  // Provide access to io so we can broadcast changes to the players
-  // this.io = io;
+function Game(name, roomNum, numberOfBots, playSoundCallback) {
   this.room = roomNum;
   this.names = [ name, "" ];
   this.wantsRematch = [ false, false ];
   this.bots = [ numberOfBots > 1, numberOfBots > 0 ]; // 1 bot means, second player is a bot, 2 bots means both are;
-  console.log("Bots %s %s", this.bots[0] ? "Yes" : "No", this.bots[1] ? "Yes" : "No");
-  // this.botTarget = new Uint16Array([ 0.25 * Game.SCREEN_W, Game.SCREEN_H / 2, 0.75 * Game.SCREEN_W, Game.SCREEN_H / 2 ]); // x, y coordinates where the bot(s) will try to move
+
   this.botTarget = new Uint16Array(4); // x, y coordinates where the bot(s) will try to move
   this.botReliableHits = Game.BOT_HITS;
 
@@ -109,7 +106,6 @@ Game.POWERUP_RADIUS = 12;
 Game.POWERUP_SIZE = 32;
 Game.HALF_POWERUP_SIZE = Game.POWERUP_SIZE / 2;
 Game.MESSAGE_DELAY = 1000;
-// Game.POWERUP_MESSAGE_TEXT = [ "", "Tranquilizer!", "Slow Grenade!", "Fast Grenade!" ];
 Game.GOAL_W = Game.TILE_SIZE;
 Game.GOAL_H = 6 * Game.TILE_SIZE;
 Game.GRENADE_SIZE = 12;
@@ -121,9 +117,7 @@ Game.SLEEP_DELAY = 1000;
 
 Game.addPlayer = (g, name) => {
   g.names[1] = name;
-  // g.io.to(g.room).emit("game ready", g.names);
   g.scene = "game";
-  // g.io.to(g.room).emit("game ready", );
   Game.resetField(g);
 }
 Game.setWantsRematch = (g, p) => {
@@ -204,9 +198,6 @@ Game.updateTranquilizer = (g, p) => {
     g.tranquilizers[3 * p + 2] = 0;
   }
 }
-// Game.isGrenadeInPlayer = (g, p) => {
-//   return g.players[4 * p] - Game.SNAKE_W / 2 < g.grenade[0] + Game.GRENADE_SIZE && g.players[4 * p] + Game.SNAKE_W / 2 > g.grenade[0] && g.players[4 * p + 1] - Game.SNAKE_H / 2 < g.grenade[1] + Game.GRENADE_SIZE && g.players[4 * p + 1] + Game.SNAKE_H / 2 > g.grenade[1];
-// }
 Game.handleGrenadeWallCollisions = (grenade) => {
   if (grenade[1] < Game.TILE_SIZE) {
     grenade[1] = Game.TILE_SIZE;
@@ -523,7 +514,7 @@ Game.handlePunch = (g, p) => {
     g.playSound(g.room, "punch", p);
   }
 }
-// TODO: update spriteClips on client-side
+// TODO: update spriteClips client-side instead
 Game.updateSpriteClip = (g, p, action, keydown) => {
   // Only update if grenade is live
   if (g.grenadeState === 0) {
@@ -690,8 +681,6 @@ Game.resetField = (g) => {
   g.startCountdown = Game.START_DELAY;
   // // Restart music
   if (g.scene === "game") {
-  //   music.currentTime = 0;
-  //   music.play();
     g.playSound(g.room, "play");
   }
 }
@@ -850,8 +839,6 @@ Game.update = (g) => {
               g.players[1] = Game.SCREEN_H / 2;
               g.players[4] = Game.SCREEN_W - (3 * Game.TILE_SIZE);
               g.players[5] = Game.SCREEN_H / 2;
-              // Prerender background
-              // Game.prerenderGameover(g);
             }
             // Reset grenade and player positions
             Game.resetField(g);

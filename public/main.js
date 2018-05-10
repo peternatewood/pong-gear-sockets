@@ -14,8 +14,6 @@ var debugInput = document.getElementById("debug");
 debugInput.value = "";
 
 const TAU = 2 * Math.PI;
-const LOAD_DELAY = 600;
-var loadCountdown = LOAD_DELAY;
 var scene = "title"; // title, lobby, game, gameover
 const LOBBY_OPTIONS = [ "join game", "create game", "vs bot" ];
 var lobbyCursor = 0;
@@ -174,17 +172,6 @@ var spritesheet = document.getElementById("spritesheet");
 const SNAKE_W = 288 / 8;
 const SNAKE_H = 192 / 3;
 const TILE_SIZE = 32;
-const MIN_X = new Uint16Array([
-  TILE_SIZE + SNAKE_W / 2, // Player 1
-  SCREEN_W / 2 + TILE_SIZE + SNAKE_W / 2 // Player 2
-]);
-const MAX_X = new Uint16Array([
-  SCREEN_W / 2 - TILE_SIZE - SNAKE_W / 2, // Player 1
-  SCREEN_W - SNAKE_W / 2 - TILE_SIZE // Player 2
-]);
-const MIN_Y = TILE_SIZE + SNAKE_H / 2;
-const MAX_Y = SCREEN_H - TILE_SIZE - SNAKE_H / 2;
-const PUNCH_DELAY = 480;
 
 const PALETTE = [ "", "#FFF", "#000", "#214a4a", "#de946b" ];
 var prerender = document.getElementById("prerender");
@@ -254,8 +241,6 @@ function prerenderGameover() {
   preContext.fillText("Press \"r\" to return to the lobby", SCREEN_W / 2, SCREEN_H * 0.8);
 }
 
-const SPAWN_CHANCE = 0.25;
-const POWERUP_DELAY = 3000;
 const POWERUP_RADIUS = 12;
 const POWERUP_SIZE = 32;
 const HALF_POWERUP_SIZE = POWERUP_SIZE / 2;
@@ -263,7 +248,6 @@ const HALF_POWERUP_SIZE = POWERUP_SIZE / 2;
 // x, y, type, countdown
 // Types: 0 = none, 1 = tranq, 2 = slow, 3 = fast
 var powerups = new Uint16Array(8);
-const MESSAGE_DELAY = 1000;
 const POWERUP_MESSAGE_TEXT = [ "", "Tranquilizer!", "Slow Grenade!", "Fast Grenade!" ];
 // type, countdown
 var powerupMessages = new Uint16Array(4);
@@ -444,14 +428,6 @@ function updateSoundsVolume() {
 }
 updateSoundsVolume();
 
-const GOAL_W = TILE_SIZE;
-const GOAL_H = 6 * TILE_SIZE;
-// Upper left corners
-var goals = new Uint16Array([
-  0, 7 * TILE_SIZE,
-  SCREEN_W - TILE_SIZE, 7 * TILE_SIZE
-]);
-
 const GRENADE_POINTS = new Uint8Array([
   0,0,1,1,2,
   0,2,3,2,1,
@@ -488,11 +464,7 @@ var grenade = new Uint16Array(6);
 var grenadeSpeeds = new Uint8Array(2);
 var grenadeState = 0;
 
-const START_DELAY = 600;
 var startCountdown;
-
-const RESET_DELAY = 1000;
-var resetCountdown = 0;
 
 var head = document.getElementById("life-head");
 // Prerender life head icon
@@ -521,11 +493,9 @@ var lostPlayer, winner;
 const PLAYER_FRAME_MAX = 180;
 // x, y, xVel, yVel
 var players = new Uint16Array(8);
-const SLEEP_DELAY = 1000;
 // Milliseconds for player being asleep
 var asleep = new Uint16Array(2);
 var playersFrames = new Uint16Array([ 0, 0 ]);
-var punchCountdown = new Uint16Array([ 0, 0 ]);
 // x, y for player 1 and 2
 var spriteClips = new Uint8Array(4);
 
