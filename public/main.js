@@ -73,7 +73,7 @@ socket.on("change scene", function(s) {
       lobbyCursor = gamesAvailable ? 0 : 1;
       break;
     case "game":
-      music.play();
+      // music.play();
       prerenderField();
       break;
     case "gameover":
@@ -130,6 +130,22 @@ socket.on("update", function(gameData) {
     winner = gameData.winner;
     lostPlayer = gameData.lostPlayer;
     prerenderGameover();
+  }
+});
+
+socket.on("play sound", function(sound, num) {
+  console.log(sound);
+  switch (sound) {
+    case "ricochet": playRicochetSound(); break;
+    case "punch": playPunchSound(num); break;
+    case "explosion": playExplodeSound(num); break;
+    case "play":
+      music.currentTime = 0;
+      music.play();
+      break;
+    case "pause":
+      music.pause();
+      break;
   }
 });
 
@@ -362,7 +378,7 @@ function playRicochetSound(p) {
   var g = aContext.createGain();
   o.connect(g);
   g.connect(aContext.destination);
-  var f = p == 0 ? 220 : 148;
+  var f = 220;
   o.frequency.value = f;
   o.type = "square";
   g.gain.setValueAtTime(calculateGain(f, 'square'), t);
