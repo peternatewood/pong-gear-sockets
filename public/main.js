@@ -73,6 +73,7 @@ socket.on("change scene", function(s) {
       lobbyCursor = gamesAvailable ? 0 : 1;
       break;
     case "game":
+      music.play();
       prerenderField();
       break;
     case "gameover":
@@ -90,12 +91,19 @@ socket.on("start game", function(playerNames) {
   prerenderField();
   scene = "game";
 });
+socket.on("start bot match", function(botName) {
+  playerNum = 0;
+  console.log("start game, %d", playerNum);
+  debugInput.value = playerName + " vs " + botName;
+  names[0] = playerName;
+  names[1] = botName;
+  waitingForPlayer = false;
+  prerenderField();
+  scene = "game";
+});
 socket.on("rematch", function(gameData) {
   console.log("rematch, %d", playerNum);
   debugInput.value = names.join(" vs ");
-  // names[0] = playerNames[0];
-  // names[1] = playerNames[1];
-  // waitingForPlayer = false;
   prerenderField();
   scene = "game";
 });
@@ -551,6 +559,9 @@ function handleKeyDown(e) {
                   break;
                 case "vs bot":
                   // TODO: Design AI player that isn't too hard or easy
+                  if (!waitingForPlayer) {
+                    socket.emit("vs bot");
+                  }
                   break;
               }
               break;

@@ -11,15 +11,20 @@
 
 TODOS:
 + Only update spriteClips clientside
-+ Improve update rate
++ Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
 */
-function Game(io, name, roomNum) {
+function Game(io, name, roomNum, vsBot) {
   // Provide access to io so we can broadcast changes to the players
   // this.io = io;
   this.room = roomNum;
   this.names = [ name, "" ];
   this.wantsRematch = [ false, false ];
+  this.vsBot = vsBot;
+  this.botTarget = new Uint16Array([ 0.75 * Game.SCREEN_W, Game.SCREEN_H / 2 ]); // x, y coordinates where the bot will try to move
+  this.botReliableHits = Game.BOT_HITS;
 
+  this.lastTimestamp = Date.now();
+  this.accumulator = Game.DELTA_TIME;
   this.loadCountdown = Game.LOAD_DELAY;
   this.scene = "lobby"; // lobby, game, gameover ("title" scene has no game associated with it)
 
@@ -43,7 +48,7 @@ function Game(io, name, roomNum) {
   ]);
 
   // x, y, xVel, yVel, frame counter, animation frame
-  this.grenade = new Uint16Array(6);
+  this.grenade = new Int16Array(6);
   // Speed on player 1 and 2's sides separately
   this.grenadeSpeeds = new Uint8Array(2);
   this.grenadeState = 0;
@@ -56,7 +61,7 @@ function Game(io, name, roomNum) {
   this.lostPlayer;
   this.winner;
   // x, y, xVel, yVel
-  this.players = new Uint16Array(8);
+  this.players = new Int16Array(8);
   // Milliseconds for player being asleep
   this.asleep = new Uint16Array(2);
   this.playersFrames = new Uint16Array([ 0, 0 ]);
@@ -89,6 +94,9 @@ Game.MAX_X = new Uint16Array([
 Game.MIN_Y = Game.TILE_SIZE + Game.SNAKE_H / 2;
 Game.MAX_Y = Game.SCREEN_H - Game.TILE_SIZE - Game.SNAKE_H / 2;
 Game.PUNCH_DELAY = 480;
+// Number of times the bot will always punch
+Game.BOT_HITS = 5;
+Game.BOT_HIT_CHANCE = 0.95;
 
 Game.SPAWN_CHANCE = 0.25;
 Game.POWERUP_DELAY = 3000;
@@ -242,6 +250,9 @@ Game.handleGrenadeCollisions = (g, p) => {
   if (deflected) {
     // TODO: This conflicts with the punch sound too much, override punch sound?
     // playRicochetSound(p);
+    if (p === 0 && g.vsBot) {
+      Game.setBotTarget(g);
+    }
   }
   else {
     // Blow up grenade on player
@@ -305,9 +316,160 @@ Game.updatePlayer = (g, p) => {
       }
     }
   }
-
-  // g.io.to(g.room).emit("update player", { p: p, players: g.players });
 };
+/*
+Bot Behavior
++ Bot is always second player (index 1)
++ Bot calculates target position to move to
+  Position should be within a range to avoid stainding right next to a wall ricochet point
++ If grenade approaching goal, bot turns to face it
+  Otherwise, bot tries to avoid grenade
+*/
+Game.setBotTarget = (g) => {
+  // Range of coordinates where the botTarget can be
+  const MIN_X = Game.SCREEN_W / 2 + 2 * Game.TILE_SIZE;
+  const MAX_X = Game.SCREEN_W - 2 * Game.TILE_SIZE;
+  const MIN_Y = 2 * Game.TILE_SIZE;
+  const MAX_Y = Game.SCREEN_H - 2 * Game.TILE_SIZE;
+
+  const MAX_ITERATIONS = 1000;
+
+  if (g.grenade[2] > 0) {
+    // Simulate grenade movement toward bot's goal until it enters a certain area
+    var simGrenade = new Uint16Array([ g.grenade[0], g.grenade[1], g.grenade[2], g.grenade[3] ]);
+    var i = 0;
+    // while (i++ < MAX_ITERATIONS && simGrenade[0] < MIN_X && simGrenade[0] > MAX_X && simGrenade[1] < MIN_Y && simGrenade[1] > MAX_Y) {
+    while (g.grenade[2] > 0 && simGrenade[0] < MIN_X) {
+      simGrenade[0] += simGrenade[2];
+      simGrenade[1] += simGrenade[3];
+
+      if (simGrenade[1] < Game.TILE_SIZE) {
+        simGrenade[1] = Game.TILE_SIZE;
+        simGrenade[3] = 1;
+      }
+      else if (simGrenade[1] > Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+        simGrenade[1] = Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+        simGrenade[3] = -1;
+      }
+      if (simGrenade[0] > Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+        simGrenade[0] = Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+        simGrenade[2] = -1;
+      }
+   }
+
+    g.botTarget[0] = simGrenade[0];
+    g.botTarget[1] = simGrenade[1];
+    console.log("Bot Target: %d %d", g.botTarget[0], g.botTarget[1]);
+  }
+  else {
+    // Avoid grenade
+    // g.botTarget[0] = 0.75 * Game.SCREEN_W;
+    // g.botTarget[1] = Game.SCREEN_H / 2;
+    g.botTarget[0] = g.players[4];
+    g.botTarget[1] = g.players[5];
+  }
+
+  // Game.updateSpriteClip(g, 1, action, keydown);
+  // Update sprite clip and velocity
+  if (g.botTarget[1] !== g.players[5]) {
+    g.spriteClips[2] = 1;
+    if (g.botTarget[1] > g.players[5]) {
+      g.spriteClips[3] = 1;
+      g.players[7] = 1;
+    }
+    else if (g.botTarget[1] < g.players[5]) {
+      g.spriteClips[3] = 0;
+      g.players[7] = -1;
+    }
+  }
+  if (g.botTarget[0] !== g.players[4]) {
+    g.spriteClips[2] = 5;
+    if (g.botTarget[0] > g.players[4]) {
+      g.spriteClips[3] = 1;
+      g.players[6] = 1;
+    }
+    else if (g.botTarget[0] < g.players[4]) {
+      g.spriteClips[3] = 0;
+      g.players[6] = -1;
+    }
+  }
+}
+Game.updateBot = (g) => {
+  // var action = "";
+  // var keydown = true;
+
+  // Get distances between bot and grenade
+  var xDist = Math.abs(g.players[4] - (g.grenade[0] + Game.GRENADE_SIZE / 2));
+  var yDist = Math.abs(g.players[5] - (g.grenade[1] + Game.GRENADE_SIZE / 2));
+
+  if (g.grenade[2] > 0) {
+    // Intercept and punch grenade
+    if (xDist < Game.SNAKE_W && yDist < Game.SNAKE_H) {
+      // Grenade is in punching distance
+      // Turn to face grenade
+      if (xDist < yDist) {
+        g.spriteClips[2] = 4;
+
+        if (g.grenade[0] < g.players[4]) {
+          // Grenade to the left, turn to face left
+          g.spriteClips[3] = 0;
+        }
+        else if (g.grenade[0] > g.players[4]) {
+          // Grenade to the right, turn to face right
+          g.spriteClips[3] = 1;
+        }
+      }
+      else {
+        g.spriteClips[2] = 0;
+
+        if (g.grenade[1] < g.players[5]) {
+          // Grenade is up, turn to face up
+          g.spriteClips[3] = 0;
+        }
+        else if (g.grenade[1] > g.players[5]) {
+          // Grenade is down, turn to face down
+          g.spriteClips[3] = 1;
+        }
+      }
+      Game.handlePunch(g, 1);
+    }
+    // else if (g.grenade[0] > Game.SCREEN_W * 0.25) {
+    //   // Move to intercept grenade
+    //   g.botTarget;
+    // }
+  }
+  else {
+    // Avoid grenade
+  }
+
+  // Stop if target reached
+  if (g.players[6] && g.players[4] === g.botTarget[0]) {
+    // if (g.players[7] === 0) {
+    //   g.spriteClips[2] = 4;
+    // }
+    g.players[6] = 0;
+  }
+  if (g.players[7] && g.players[5] === g.botTarget[1]) {
+    // if (g.players[6] === 0) {
+    //   g.spriteClips[2] = 0;
+    // }
+    g.players[7] = 0;
+  }
+
+  if (g.players[6] === 0 && g.players[7] === 0) {
+    // Turn to face grenade
+    if (yDist > xDist) {
+      g.spriteClips[2] = 0;
+      g.spriteClips[3] = g.grenade[1] < g.players[5] ? 0 : 1;
+    }
+    else {
+      g.spriteClips[2] = 4;
+      g.spriteClips[3] = g.grenade[0] < g.players[4] ? 0 : 1;
+    }
+  }
+
+  // Game.updateSpriteClip(g, 1, action, keydown);
+}
 // Handle input
 Game.handlePunch = (g, p) => {
   if (g.punchCountdown[p] === 0 && !g.inputs[p].punch) {
@@ -533,139 +695,153 @@ Game.update = (g) => {
     case "title":
       break;
     case "game":
-      if (g.startCountdown !== 0) {
-        g.startCountdown -= Game.DELTA_TIME;
-        if (g.startCountdown <= 0) {
-          g.startCountdown = 0;
-        }
-      }
-      else if (g.grenadeState === 0) {
-        // Update players
-        Game.updatePlayer(g, 0);
-        Game.updatePlayer(g, 1);
+      var now = Date.now();
+      g.accumulator += now - g.lastTimestamp;
+      g.lastTimestamp = now;
 
-        // Update grenade
-        g.grenade[0] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[2];
-        g.grenade[1] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[3];
-        // Check whether grenade enters a goal
-        if (g.grenade[0] < g.goals[0] + Game.GOAL_W && g.grenade[1] > g.goals[1] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[1] + Game.GOAL_H) {
-          // Player 1 goal
-          Game.explodeGrenade(g, 0);
-        }
-        else if (g.grenade[0] + Game.GRENADE_SIZE > g.goals[2] && g.grenade[1] > g.goals[3] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[3] + Game.GOAL_H) {
-          // Player 2 goal
-          Game.explodeGrenade(g, 1);
-        }
-        else {
-          // Bounce off of walls
-          var bounced = false;
-          if (g.grenade[1] < Game.TILE_SIZE) {
-            g.grenade[1] = Game.TILE_SIZE;
-            g.grenade[3] = 1;
-            bounced = true;
-          }
-          else if (g.grenade[1] > Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
-            g.grenade[1] = Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE);
-            g.grenade[3] = -1;
-            bounced = true;
-          }
-          if (g.grenade[0] < Game.TILE_SIZE) {
-            g.grenade[0] = Game.TILE_SIZE;
-            g.grenade[2] = 1;
-            bounced = true;
-          }
-          else if (g.grenade[0] > Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
-            g.grenade[0] = Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE);
-            g.grenade[2] = -1;
-            bounced = true;
-          }
+      while (g.accumulator >= Game.DELTA_TIME) {
+        g.accumulator -= Game.DELTA_TIME;
 
-          if (bounced) {
-            // playRicochetSound();
+        if (g.startCountdown !== 0) {
+          g.startCountdown -= Game.DELTA_TIME;
+          if (g.startCountdown <= 0) {
+            g.startCountdown = 0;
           }
         }
+        else if (g.grenadeState === 0) {
+          // Update bot logic if a bot match
+          if (g.vsBot) {
+            Game.updateBot(g);
+          }
 
-        // Handle collisions
-        Game.handleGrenadeCollisions(g, 0);
-        Game.handleGrenadeCollisions(g, 1);
-      }
+          // Update players
+          Game.updatePlayer(g, 0);
+          Game.updatePlayer(g, 1);
 
-      if (g.resetCountdown !== 0) {
-        g.resetCountdown -= Game.DELTA_TIME;
-        if (g.resetCountdown <= 0) {
-          g.resetCountdown === 0;
-          // Reduce player's lives and check whether player lost all lives
-          if (--g.lives[g.lostPlayer] === 0) {
-            // music.pause();
-            g.scene = "gameover";
-            g.winner = 1 - g.lostPlayer;
-            // Set winning player's spriteclip to running and losing player's spriteclip to standing
-            if (g.lostPlayer === 0) {
-              g.spriteClips[0] = 4;
-              g.spriteClips[2] = 5;
+          // Update grenade
+          g.grenade[0] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[2];
+          g.grenade[1] += g.grenadeSpeeds[g.grenade[0] / (Game.SCREEN_W / 2) >> 0] * g.grenade[3];
+          // Check whether grenade enters a goal
+          if (g.grenade[0] < g.goals[0] + Game.GOAL_W && g.grenade[1] > g.goals[1] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[1] + Game.GOAL_H) {
+            // Player 1 goal
+            Game.explodeGrenade(g, 0);
+          }
+          else if (g.grenade[0] + Game.GRENADE_SIZE > g.goals[2] && g.grenade[1] > g.goals[3] && g.grenade[1] + Game.GRENADE_SIZE < g.goals[3] + Game.GOAL_H) {
+            // Player 2 goal
+            Game.explodeGrenade(g, 1);
+          }
+          else {
+            // Bounce off of walls
+            var bounced = false;
+            if (g.grenade[1] < Game.TILE_SIZE) {
+              g.grenade[1] = Game.TILE_SIZE;
+              g.grenade[3] = 1;
+              bounced = true;
             }
-            else {
-              g.spriteClips[0] = 5;
-              g.spriteClips[2] = 4;
+            else if (g.grenade[1] > Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+              g.grenade[1] = Game.SCREEN_H - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+              g.grenade[3] = -1;
+              bounced = true;
             }
-            // Player 1 facing right, 2 facing left
-            g.spriteClips[1] = 1;
-            g.spriteClips[3] = 0;
-            g.players[0] = 3 * Game.TILE_SIZE;
-            g.players[1] = Game.SCREEN_H / 2;
-            g.players[4] = Game.SCREEN_W - (3 * Game.TILE_SIZE);
-            g.players[5] = Game.SCREEN_H / 2;
-            // Prerender background
-            // Game.prerenderGameover(g);
+            if (g.grenade[0] < Game.TILE_SIZE) {
+              g.grenade[0] = Game.TILE_SIZE;
+              g.grenade[2] = 1;
+              bounced = true;
+            }
+            else if (g.grenade[0] > Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE)) {
+              g.grenade[0] = Game.SCREEN_W - (Game.GRENADE_SIZE + Game.TILE_SIZE);
+              g.grenade[2] = -1;
+              bounced = true;
+            }
+
+            if (bounced) {
+              // playRicochetSound();
+              Game.setBotTarget(g);
+            }
           }
-          // Reset grenade and player positions
-          Game.resetField(g);
-        }
-      }
 
-      // Update grenade animation clip
-      if (g.grenadeState !== 2) {
-        g.grenade[4] += Game.DELTA_TIME;
-        if (g.grenade[4] === Game.DELTA_TIME * 120) {
-          g.grenade[4] = 0;
+          // Handle collisions
+          Game.handleGrenadeCollisions(g, 0);
+          Game.handleGrenadeCollisions(g, 1);
         }
-        if (g.grenade[4] === Game.DELTA_TIME * 30) {
-          g.grenade[4] = 0;
-          g.grenade[5] += g.grenadeState === 0 ? 14 : Game.SNAKE_W;
-          switch (g.grenadeState) {
-            case 0:
-              if (g.grenade[5] > 42) {
-                // Reset animation frame so it loops
-                g.grenade[5] = 0;
+
+        if (g.resetCountdown !== 0) {
+          g.resetCountdown -= Game.DELTA_TIME;
+          if (g.resetCountdown <= 0) {
+            g.resetCountdown === 0;
+            // Reduce player's lives and check whether player lost all lives
+            if (--g.lives[g.lostPlayer] === 0) {
+              // music.pause();
+              g.scene = "gameover";
+              g.winner = 1 - g.lostPlayer;
+              // Set winning player's spriteclip to running and losing player's spriteclip to standing
+              if (g.lostPlayer === 0) {
+                g.spriteClips[0] = 4;
+                g.spriteClips[2] = 5;
               }
-              break;
-            case 1:
-              if (g.grenade[5] === Game.SNAKE_W * 4) {
-                // End explosion animation
-                g.grenadeState = 2;
-                // Remove firing tranquilizers
-                if (g.tranquilizers[2] === 2) g.tranquilizers[2] = 0;
-                if (g.tranquilizers[5] === 2) g.tranquilizers[5] = 0;
-                // Start countdown to reset game
-                g.resetCountdown = Game.RESET_DELAY;
+              else {
+                g.spriteClips[0] = 5;
+                g.spriteClips[2] = 4;
               }
-              break;
+              // Player 1 facing right, 2 facing left
+              g.spriteClips[1] = 1;
+              g.spriteClips[3] = 0;
+              g.players[0] = 3 * Game.TILE_SIZE;
+              g.players[1] = Game.SCREEN_H / 2;
+              g.players[4] = Game.SCREEN_W - (3 * Game.TILE_SIZE);
+              g.players[5] = Game.SCREEN_H / 2;
+              // Prerender background
+              // Game.prerenderGameover(g);
+            }
+            // Reset grenade and player positions
+            Game.resetField(g);
           }
         }
-      }
 
-      if (g.resetCountdown === 0) {
-        // Update powerups
-        Game.updatePowerup(g, 0);
-        Game.updatePowerup(g, 1);
-      }
+        // Update grenade animation clip
+        if (g.grenadeState !== 2) {
+          g.grenade[4] += Game.DELTA_TIME;
+          if (g.grenade[4] === Game.DELTA_TIME * 120) {
+            g.grenade[4] = 0;
+          }
+          if (g.grenade[4] === Game.DELTA_TIME * 30) {
+            g.grenade[4] = 0;
+            g.grenade[5] += g.grenadeState === 0 ? 14 : Game.SNAKE_W;
+            switch (g.grenadeState) {
+              case 0:
+                if (g.grenade[5] > 42) {
+                  // Reset animation frame so it loops
+                  g.grenade[5] = 0;
+                }
+                break;
+              case 1:
+                if (g.grenade[5] === Game.SNAKE_W * 4) {
+                  // End explosion animation
+                  g.grenadeState = 2;
+                  // Remove firing tranquilizers
+                  if (g.tranquilizers[2] === 2) g.tranquilizers[2] = 0;
+                  if (g.tranquilizers[5] === 2) g.tranquilizers[5] = 0;
+                  // Start countdown to reset game
+                  g.resetCountdown = Game.RESET_DELAY;
+                }
+                break;
+            }
+          }
+        }
 
-      // Update tranquilizers
-      if (g.tranquilizers[2] === 2) {
-        Game.updateTranquilizer(g, 0);
-      }
-      if (g.tranquilizers[5] === 2) {
-        Game.updateTranquilizer(g, 1);
+        if (g.resetCountdown === 0) {
+          // Update powerups
+          Game.updatePowerup(g, 0);
+          Game.updatePowerup(g, 1);
+        }
+
+        // Update tranquilizers
+        if (g.tranquilizers[2] === 2) {
+          Game.updateTranquilizer(g, 0);
+        }
+        if (g.tranquilizers[5] === 2) {
+          Game.updateTranquilizer(g, 1);
+        }
       }
       break;
     case "gameover":

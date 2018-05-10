@@ -98,7 +98,6 @@ app.get("/", (request, response) => {
 /*
 Add player to existing game, or if no games, create a new game with the user as player 1
 */
-var roomNum = 0;
 var waitingGames = [];
 var games = [];
 
@@ -110,7 +109,7 @@ var intervalID = setInterval(() => {
       io.to(games[i].room).emit("update", Game.getData(games[i]));
     }
   }
-}, Game.DELTA_TIME);
+}, 10);
 
 io.on("connection", (socket) => {
   var name = generatePlayerName();
@@ -232,6 +231,19 @@ io.on("connection", (socket) => {
         break;
       }
     }
+  });
+
+  socket.on("vs bot", () => {
+    playerNum = 0;
+    room = (Date.now()).toString();
+    socket.join(room);
+    game = new Game(io, name, room, true);
+    console.log("New bot match in room %d", room);
+    gameIndex = games.length - 1;
+    var botName = generatePlayerName();
+    Game.addPlayer(game, botName);
+    games.push(game);
+    socket.emit("start bot match", botName);
   });
 
   socket.on("opponent disconnected", () => {
