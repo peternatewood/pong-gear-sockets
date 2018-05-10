@@ -2,14 +2,21 @@
   "name": "pong-gear",
   "version": "1.0.0",
   "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/peternatewood/pong-gear-sockets.git"
+  },
   "main": "index.js",
+  "scripts": {
+    "postinstall": "grunt uglify"
+  },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.15.4",
-    "grunt": "1.0.1",
-    "grunt-cli": "1.2.0",
-    "grunt-contrib-uglify": "3.1.0",
-    "socket.io": "^2.0.3"
+    "express": "^4.16.3",
+    "grunt": "^1.0.2",
+    "grunt-cli": "^1.2.0",
+    "grunt-contrib-uglify": "^3.3.0",
+    "socket.io": "^2.1.0"
   }
 }
