@@ -81,7 +81,6 @@ socket.on("change scene", function(s) {
 });
 
 socket.on("start game", function(playerNames) {
-  console.log("start game, %d", playerNum);
   debugInput.value = playerNames.join(" vs ");
   names[0] = playerNames[0];
   names[1] = playerNames[1];
@@ -91,7 +90,6 @@ socket.on("start game", function(playerNames) {
 });
 socket.on("start bot match", function(botName) {
   playerNum = 0;
-  console.log("start game, %d", playerNum);
   debugInput.value = playerName + " vs " + botName;
   names[0] = playerName;
   names[1] = botName;
@@ -100,7 +98,6 @@ socket.on("start bot match", function(botName) {
   scene = "game";
 });
 socket.on("rematch", function(gameData) {
-  console.log("rematch, %d", playerNum);
   debugInput.value = names.join(" vs ");
   prerenderField();
   scene = "game";
@@ -132,7 +129,6 @@ socket.on("update", function(gameData) {
 });
 
 socket.on("play sound", function(sound, num) {
-  console.log(sound);
   switch (sound) {
     case "ricochet": playRicochetSound(); break;
     case "punch": playPunchSound(num); break;
@@ -148,13 +144,13 @@ socket.on("play sound", function(sound, num) {
 });
 
 socket.on("wants rematch", function(num) {
-  console.log("Wants rematch!");
   spriteClips[2 * num] = 7;
 });
 socket.on("opponent disconnected", function() {
   scene = "lobby";
   lobbyCursor = gamesAvailable ? 0 : 1;
   socket.emit("opponent disconnected");
+  // TODO: indicate disconnect to user
 });
 
 var context = document.getElementById('canvas').getContext('2d');
