@@ -13,6 +13,12 @@ TODOS:
 + Only update spriteClips clientside
 + Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
   - Simulate game on both client- and server-side with some way to regularly sync?
++ Highlight field when fast/slow grenade is active
+
+BUGS:
++ If client creates a game and refreshes, the game remains in the waiting queue
++ Sometimes, p:0 (player 1) ends up running left and down after Game::resetField
++ Tranquilizer doesn't fire dart
 */
 function Game(name, roomNum, numberOfBots, playSoundCallback) {
   this.room = roomNum;
