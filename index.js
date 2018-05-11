@@ -6,7 +6,7 @@ var path = require('path');
 var server = require('http').Server(app);
 var io = require('socket.io')(server);
 
-var Game = require("./src/game.js").game;
+var Game = require("./src/game.js");
 
 server.listen(PORT, () => {
   console.log('Server listening at port %d', PORT);
@@ -107,8 +107,8 @@ function playSound(room, sound, p) {
 var intervalID = setInterval(() => {
   for (var i = 0; i < games.length; i++) {
     if (games[i].scene === "game") {
-      Game.update(games[i]);
-      io.to(games[i].room).emit("update", Game.getData(games[i]));
+      games[i].update();
+      io.to(games[i].room).emit("update", games[i].getData());
     }
   }
 }, 10);
@@ -132,35 +132,37 @@ io.on("connection", (socket) => {
       case "game":
         if (game) {
           switch (game.scene) {
-            case "game":
-              Game.handleKeyDown(game, playerNum, data.action);
+            case "game": game.handleKeyDown(playerNum, data.action); break;
+            case "gameover":
+              // Rematch or return to lobby
+              switch (data.action) {
+                case "punch":
+                  // Flag this player as wanting rematch, and only reset if both players are willing, or the other player is a bot
+                  // Game.setWantsRematch(game, playerNum);
+                  game.setWantsRematch(playerNum);
+                  socket.broadcast.to(room).emit("wants rematch", playerNum);
+                  if ((game.wantsRematch[0] || game.bots[0]) && (game.wantsRematch[1] || game.bots[1])) {
+                    // Game.reset(game);
+                    // io.to(room).emit("rematch", Game.getData(game));
+                    game.reset();
+                    io.to(room).emit("rematch", game.getData());
+                  }
+                  break;
+                case "reroll":
+                  // Return player to lobby instead of rematching
+                  io.to(room).emit("change scene", "lobby");
+                  games.splice(gameIndex, 1);
+                  console.log("Game count %d", games.length);
+                  if (games.length === 0) {
+                    io.emit("no games available");
+                  }
+                  game = null;
+                  break;
+              }
               break;
-          case "gameover":
-            // Rematch or return to lobby
-            switch (data.action) {
-              case "punch":
-                // Flag this player as wanting rematch, and only reset if both players are willing, or the other player is a bot
-                Game.setWantsRematch(game, playerNum);
-                socket.broadcast.to(room).emit("wants rematch", playerNum);
-                if ((game.wantsRematch[0] || game.bots[0]) && (game.wantsRematch[1] || game.bots[1])) {
-                  Game.reset(game);
-                  io.to(room).emit("rematch", Game.getData(game));
-                }
-                break;
-              case "reroll":
-                // Return player to lobby instead of rematching
-                io.to(room).emit("change scene", "lobby");
-                games.splice(gameIndex, 1);
-                console.log("Game count %d", games.length);
-                if (games.length === 0) {
-                  io.emit("no games available");
-                }
-                game = null;
-                break;
-            }
-            break;
+          }
         }
-      }
+        break;
     }
   }
 
@@ -169,7 +171,7 @@ io.on("connection", (socket) => {
       case "lobby":
       case "game":
         if (game) {
-          Game.handleKeyUp(game, playerNum, data.action);
+          game.handleKeyUp(playerNum, data.action);
         }
         break;
     }
@@ -216,15 +218,16 @@ io.on("connection", (socket) => {
       if (waitingGames[i]) {
         playerNum = 1;
         game = waitingGames.splice(i, 1)[0];
+        game.addPlayer(name);
         games.push(game);
         gameIndex = i;
         // Update all clients if this was the only waiting game
         if (waitingGames.length === 0) {
           io.emit("no games available");
         }
+        // Join game's room so both players receive updates
         room = game.room;
         socket.join(room);
-        Game.addPlayer(game, name);
         console.log("New game between %s and %s", game.names[0], game.names[1]);
         // Send player number to client
         socket.emit("player num", playerNum);
@@ -243,7 +246,7 @@ io.on("connection", (socket) => {
     console.log("New bot match in room %d", room);
     gameIndex = games.length - 1;
     var botName = generatePlayerName();
-    Game.addPlayer(game, botName);
+    game.addPlayer(botName);
     games.push(game);
     socket.emit("start bot match", botName);
   });
