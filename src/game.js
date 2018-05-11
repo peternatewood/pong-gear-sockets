@@ -83,6 +83,8 @@ class Game {
   addPlayer(name) {
     this.names[1] = name;
     this.scene = "game";
+    this.accumulator = Game.DELTA_TIME;
+    this.lastTimestamp = Date.now();
     this.resetField();
   }
   setWantsRematch(p) {
