@@ -16,8 +16,6 @@ TODOS:
 + Allow user to back out of waiting for a player to join their game
 
 BUGS:
-+ If client creates a game and refreshes, the game remains in the waiting queue
-+ Sometimes, p:0 (player 1) ends up running left and down after Game::resetField
 + Tranquilizer doesn't fire dart
 */
 class Game {
