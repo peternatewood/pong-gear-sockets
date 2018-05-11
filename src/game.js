@@ -13,7 +13,6 @@ TODOS:
 + Only update spriteClips clientside
 + Improve update rate: maybe still use delta timing, but setInterval on 20ms or something?
   - Simulate game on both client- and server-side with some way to regularly sync?
-+ Highlight field when fast/slow grenade is active
 
 BUGS:
 + If client creates a game and refreshes, the game remains in the waiting queue
@@ -655,8 +654,12 @@ Game.resetField = (g) => {
   g.botTarget[2] = g.players[4];
   g.botTarget[3] = g.players[5];
 
-  Game.setBotTarget(g, 0);
-  Game.setBotTarget(g, 1);
+  if (g.bots[0]) {
+    Game.setBotTarget(g, 0);
+  }
+  if (g.bots[1]) {
+    Game.setBotTarget(g, 1);
+  }
 
   g.botReliableHits = Game.BOT_HITS;
 
