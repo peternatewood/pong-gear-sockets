@@ -456,6 +456,10 @@ for (var i = 0; i < GRENADE_POINTS.length; i++) {
 var GRENADE_SIZE = 12;
 // x, y, xVel, yVel, frame counter, animation frame
 var grenade = new Uint16Array(6);
+var SPEED_COLORS = {
+  "1": "rgba(51,170,255,0.25)",
+  "3": "rgba(204,119,51,0.25)"
+};
 // Speed on player 1 and 2's sides separately
 var grenadeSpeeds = new Uint8Array(2);
 var grenadeState = 0;
@@ -712,6 +716,17 @@ function frameStep(timestamp) {
       context.clearRect(0, 0, SCREEN_W, SCREEN_H);
       // Render walls
       context.drawImage(prerender, 0, 0, SCREEN_W, SCREEN_H);
+      // Highlight active speed powerups
+      if (grenadeSpeeds[0] !== 2) {
+        // Highlight Player 1 field
+        context.fillStyle = SPEED_COLORS[grenadeSpeeds[0]];
+        context.fillRect(TILE_SIZE, TILE_SIZE, SCREEN_W / 2 - TILE_SIZE, SCREEN_H - 2 * TILE_SIZE);
+      }
+      if (grenadeSpeeds[1] !== 2) {
+        // Highlight Player 2 field
+        context.fillStyle = SPEED_COLORS[grenadeSpeeds[1]];
+        context.fillRect(SCREEN_W / 2, TILE_SIZE, SCREEN_W / 2 - TILE_SIZE, SCREEN_H - 2 * TILE_SIZE);
+      }
 
       // Render powerups
       if (powerups[2] === 1) {
