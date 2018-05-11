@@ -787,16 +787,16 @@ function frameStep(timestamp) {
       }
       // Lives
       context.textAlign = "right";
-      context.strokeText(names[0] + ": ", 160, 22);
-      context.fillText(names[0] + ": ", 160, 22);
-      context.strokeText(names[1] + ": ", SCREEN_W / 2 + 160, 22);
-      context.fillText(names[1] + ": ", SCREEN_W / 2 + 160, 22);
+      context.strokeText(names[0] + ": ", 0.25 * SCREEN_W, 22);
+      context.fillText(names[0] + ": ", 0.25 * SCREEN_W, 22);
+      context.strokeText(names[1] + ": ", 0.75 * SCREEN_W, 22);
+      context.fillText(names[1] + ": ", 0.75 * SCREEN_W, 22);
       // Lives as heads
       for (var i = 0; i < lives[0]; i++) {
-        context.drawImage(head, 168 + i * head.width * 1.5, 8);
+        context.drawImage(head, 0.25 * SCREEN_W + 8 + i * head.width * 1.5, 8);
       }
       for (var i = 0; i < lives[1]; i++) {
-        context.drawImage(head, SCREEN_W / 2 + 168 + i * head.width * 1.5, 8);
+        context.drawImage(head, 0.75 * SCREEN_W + 8 + i * head.width * 1.5, 8);
       }
       context.lineWidth = 2;
       break;
