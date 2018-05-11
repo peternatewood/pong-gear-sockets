@@ -220,7 +220,7 @@ io.on("connection", (socket) => {
         game = waitingGames.splice(i, 1)[0];
         game.addPlayer(name);
         games.push(game);
-        gameIndex = i;
+        gameIndex = games.length - 1;
         // Update all clients if this was the only waiting game
         if (waitingGames.length === 0) {
           io.emit("no games available");
@@ -263,8 +263,14 @@ io.on("connection", (socket) => {
     console.log("%s disconnected", name);
     // Report disconnect to opponent
     io.to(room).emit("opponent disconnected");
-    // Remove game from active games
-    games.splice(gameIndex, 1);
-    console.log("Game count %d", games.length);
+    if (game.scene === "lobby") {
+      // Remove game from waiting queue
+      waitingGames.splice(gameIndex, 1);
+    }
+    else {
+      // Remove game from active games
+      games.splice(gameIndex, 1);
+    }
+    console.log("Waiting games count %d, Game count %d", waitingGames.length, games.length);
   });
 });
