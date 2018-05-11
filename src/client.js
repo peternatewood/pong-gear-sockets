@@ -9,10 +9,6 @@
   - Fast Field: grenade is faster on your side
   - Tranq Pistol: single-shot pistol temporarily puts opponent to sleep if it hits
 */
-var debug = true;
-var debugInput = document.getElementById("debug");
-debugInput.value = "";
-
 var TAU = 2 * Math.PI;
 var scene = "title"; // title, lobby, game, gameover
 var LOBBY_OPTIONS = [ "join game", "create game", "vs bot" ];
@@ -25,7 +21,6 @@ var playerNum, playerName, rerolls;
 var names = [ "", "" ];
 var socket = io();
 socket.on("welcome", function(data) {
-  debugInput.value = "Welcome " + data.name + "!";
   playerName = data.name;
   rerolls = data.rerolls;
   gamesAvailable = data.gamesAvailable;
@@ -38,7 +33,6 @@ socket.on("player num", function(num) {
   playerNum = num;
 });
 socket.on("game created", function(num) {
-  debugInput.value = "Created game, waiting for player... ";
   playerNum = num;
 });
 
@@ -54,7 +48,7 @@ socket.on("new name", function(data) {
   rerolls = data.rerolls;
 });
 socket.on("reroll limit", function(msg) {
-  debugInput.value = msg;
+  // TODO: inform user they can't reroll anymore
 });
 
 socket.on("change scene", function(s) {
@@ -81,7 +75,6 @@ socket.on("change scene", function(s) {
 });
 
 socket.on("start game", function(playerNames) {
-  debugInput.value = playerNames.join(" vs ");
   names[0] = playerNames[0];
   names[1] = playerNames[1];
   waitingForPlayer = false;
@@ -90,7 +83,6 @@ socket.on("start game", function(playerNames) {
 });
 socket.on("start bot match", function(botName) {
   playerNum = 0;
-  debugInput.value = playerName + " vs " + botName;
   names[0] = playerName;
   names[1] = botName;
   waitingForPlayer = false;
@@ -98,13 +90,12 @@ socket.on("start bot match", function(botName) {
   scene = "game";
 });
 socket.on("rematch", function(gameData) {
-  debugInput.value = names.join(" vs ");
   prerenderField();
   scene = "game";
 });
 
 socket.on("game exists", function(msg) {
-  debugInput.value = msg;
+  // User tried to create a new game, but they already have one in the queue
 });
 
 socket.on("update", function(gameData) {
