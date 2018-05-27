@@ -2,3 +2,6 @@
 /node_modules
 # Uglified js file
 public/main.js
+# OSX
+._*.png
+._*.ico
