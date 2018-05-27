@@ -57,9 +57,11 @@ body {
 
 .music-controls {
   position: fixed;
+  box-sizing: border-box;
   color: #FFF;
   text-align: left;
   padding: 0 12px;
+  width: calc((100% - 1024px) / 2);
   right: 0;
   top: 50%;
   transform: translateY(-50%);
