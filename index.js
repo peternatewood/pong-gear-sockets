@@ -263,14 +263,16 @@ io.on("connection", (socket) => {
     console.log("%s disconnected", name);
     // Report disconnect to opponent
     io.to(room).emit("opponent disconnected");
-    if (game.scene === "lobby") {
-      // Remove game from waiting queue
-      waitingGames.splice(gameIndex, 1);
+    if (game) {
+      if (game.scene === "lobby") {
+        // Remove game from waiting queue
+        waitingGames.splice(gameIndex, 1);
+      }
+      else {
+        // Remove game from active games
+        games.splice(gameIndex, 1);
+      }
+      console.log("Waiting games count %d, Game count %d", waitingGames.length, games.length);
     }
-    else {
-      // Remove game from active games
-      games.splice(gameIndex, 1);
-    }
-    console.log("Waiting games count %d, Game count %d", waitingGames.length, games.length);
   });
 });
