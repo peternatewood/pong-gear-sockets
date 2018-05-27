@@ -925,7 +925,7 @@ Game.MAX_Y = Game.SCREEN_H - Game.TILE_SIZE - Game.SNAKE_H / 2;
 Game.PUNCH_DELAY = 480;
 // Number of times the bot will always punch
 Game.BOT_HITS = 5;
-Game.BOT_HIT_CHANCE = 0.95;
+Game.BOT_HIT_CHANCE = 0.85;
 
 Game.SPAWN_CHANCE = 0.25;
 Game.POWERUP_DELAY = 5000;
